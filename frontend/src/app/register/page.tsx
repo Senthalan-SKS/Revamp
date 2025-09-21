@@ -23,7 +23,8 @@ export default function Register() {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
-  const GATEWAY_URL = "http://localhost:4000";
+  const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL as string;
+
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });

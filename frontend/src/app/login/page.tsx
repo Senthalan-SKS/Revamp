@@ -10,7 +10,7 @@ interface LoginForm {
 
 interface ApiResponse {
   token?: string;
-  user?: any;
+  user?: { role: string };
   message?: string;
 }
 
@@ -20,7 +20,10 @@ export default function Login() {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
-  const GATEWAY_URL = "http://localhost:4000"; // Express gateway
+  //const GATEWAY_URL = "http://localhost:4000"; 
+  const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL as string;
+
+  
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -30,19 +33,26 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
+
     try {
       const res = await fetch(`${GATEWAY_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+
       const body: ApiResponse = await res.json();
       if (!res.ok) throw new Error(body.message || "Login failed");
 
       if (body.token) localStorage.setItem("token", body.token);
       if (body.user) localStorage.setItem("user", JSON.stringify(body.user));
 
-      router.push("/"); // redirect after login
+      // Redirect based on role
+      const role = body.user?.role;
+      if (role === "ADMIN") router.push("/admin-dashboard");
+      else if (role === "EMPLOYEE") router.push("/employee-dashboard");
+      else router.push("/consumer-dashboard");
+
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -105,4 +115,4 @@ export default function Login() {
       </div>
     </main>
   );
-}
+}  

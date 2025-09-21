@@ -11,14 +11,15 @@ public class User {
     private String username;
     private String email;
     private String passwordHash; // store hashed password
-    private String role; // optional
+    private String role; // "ADMIN", "EMPLOYEE", "CONSUMER"
 
     public User() {}
 
-    public User(String username, String email, String passwordHash) {
+    public User(String username, String email, String passwordHash, String role) {
         this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.role = role;
     }
 
     // getters & setters

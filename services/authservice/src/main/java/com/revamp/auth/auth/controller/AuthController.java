@@ -27,6 +27,7 @@ public class AuthController {
         public String username;
         public String email;
         public String password;
+        public String role;
     }
 
     public static class LoginRequest {
@@ -46,7 +47,7 @@ public class AuthController {
    @PostMapping("/register")
 public ResponseEntity<?> register(@RequestBody RegisterRequest req) {
     try {
-        User created = authService.register(req.username, req.email, req.password);
+        User created = authService.register(req.username, req.email, req.password, req.role);
         created.setPasswordHash(null);
 
         return ResponseEntity
@@ -60,16 +61,20 @@ public ResponseEntity<?> register(@RequestBody RegisterRequest req) {
 
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest req) {
-        try {
-            String token = authService.login(req.email, req.password);
-            return ResponseEntity.ok(new AuthResponse(
-                    token,
-                    Collections.singletonMap("email", req.email)
-            ));
-        } catch (RuntimeException ex) {
-            return ResponseEntity.status(401)
-                    .body(Collections.singletonMap("message", ex.getMessage()));
-        }
+public ResponseEntity<?> login(@RequestBody LoginRequest req) {
+    try {
+        User user = authService.getUserByEmail(req.email);
+        String token = authService.login(req.email, req.password);
+
+        user.setPasswordHash(null); // don’t leak hash
+        return ResponseEntity.ok(new AuthResponse(
+                token,
+                Collections.singletonMap("role", user.getRole())
+        ));
+    } catch (RuntimeException ex) {
+        return ResponseEntity.status(401)
+                .body(Collections.singletonMap("message", ex.getMessage()));
     }
+}
+
 }
