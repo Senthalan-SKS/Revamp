@@ -46,10 +46,10 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to register employee");
-      setMessage("✅ Employee created successfully!");
+      setMessage(" Employee created successfully!");
       setForm({ username: "", email: "", password: "", role: "EMPLOYEE" });
     } catch (err: any) {
-      setMessage(`❌ ${err.message}`);
+      setMessage(` ${err.message}`);
     }
   };
 
