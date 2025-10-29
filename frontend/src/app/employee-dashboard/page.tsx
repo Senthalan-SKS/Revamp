@@ -4,75 +4,841 @@ import { useEffect, useState } from "react";
 import { getGreeting } from "../../utils/greeting";
 import { decodeToken, TokenPayload } from "../../utils/jwt";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  Play, 
+  Pause, 
+  Calendar, 
+  User, 
+  Settings, 
+  History,
+  Bell,
+  Car,
+  Wrench,
+  Timer
+} from "lucide-react";
+
+interface Task {
+  id: string;
+  customerName: string;
+  vehicleInfo: string;
+  serviceType: 'service' | 'modification';
+  description: string;
+  status: 'assigned' | 'accepted' | 'in-progress' | 'completed' | 'delivered';
+  priority: 'low' | 'medium' | 'high';
+  estimatedHours: number;
+  assignedDate: string;
+  dueDate: string;
+  instructions?: string;
+}
+
+interface TimeLog {
+  id: string;
+  taskId: string;
+  startTime: string;
+  endTime?: string;
+  duration?: number;
+  status: 'active' | 'completed';
+}
 
 export default function EmployeeDashboard() {
   const [user, setUser] = useState<TokenPayload | null>(null);
-
-  
-
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'profile' | 'history'>('dashboard');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
+  const [currentTimeLog, setCurrentTimeLog] = useState<TimeLog | null>(null);
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       const decoded = decodeToken(token);
       setUser(decoded);
+    } else {
+      // Development bypass - create mock user for testing
+      setUser({
+        sub: "emp001",
+        username: "John Employee",
+        email: "john.employee@revamp.com",
+        role: "EMPLOYEE"
+      });
     }
-
+    // Load mock data
+    loadMockData();
   }, []);
+
+  const loadMockData = () => {
+    setTasks([
+      {
+        id: '1',
+        customerName: 'John Smith',
+        vehicleInfo: '2020 Honda Civic - Red',
+        serviceType: 'service',
+        description: 'Oil change and brake inspection',
+        status: 'assigned',
+        priority: 'medium',
+        estimatedHours: 2,
+        assignedDate: '2024-01-15',
+        dueDate: '2024-01-16',
+        instructions: 'Check brake pads and replace if needed'
+      },
+      {
+        id: '2',
+        customerName: 'Sarah Johnson',
+        vehicleInfo: '2019 Toyota Camry - Blue',
+        serviceType: 'modification',
+        description: 'Engine upgrade and ECU tuning',
+        status: 'in-progress',
+        priority: 'high',
+        estimatedHours: 8,
+        assignedDate: '2024-01-14',
+        dueDate: '2024-01-18',
+        instructions: 'Follow manufacturer guidelines for engine swap'
+      },
+      {
+        id: '3',
+        customerName: 'Mike Wilson',
+        vehicleInfo: '2021 Ford Mustang - Black',
+        serviceType: 'service',
+        description: 'Transmission service',
+        status: 'completed',
+        priority: 'low',
+        estimatedHours: 3,
+        assignedDate: '2024-01-13',
+        dueDate: '2024-01-15',
+        instructions: 'Replace transmission fluid and filter'
+      }
+    ]);
+
+    setTimeLogs([
+      {
+        id: '1',
+        taskId: '2',
+        startTime: '2024-01-15T09:00:00',
+        status: 'active'
+      }
+    ]);
+
+    setCurrentTimeLog({
+      id: '1',
+      taskId: '2',
+      startTime: '2024-01-15T09:00:00',
+      status: 'active'
+    });
+  };
 
   const greeting = getGreeting();
 
+  const handleTaskAction = (taskId: string, action: 'accept' | 'reject' | 'start' | 'complete' | 'deliver') => {
+    setTasks(prev => prev.map(task => {
+      if (task.id === taskId) {
+        switch (action) {
+          case 'accept':
+            return { ...task, status: 'accepted' };
+          case 'reject':
+            // Send notification to admin about rejection
+            sendNotificationToAdmin(taskId, 'rejected', task);
+            return { ...task, status: 'assigned' }; // Keep as assigned for admin to reassign
+          case 'start':
+            return { ...task, status: 'in-progress' };
+          case 'complete':
+            // Send notification to admin about completion
+            sendNotificationToAdmin(taskId, 'completed', task);
+            return { ...task, status: 'completed' };
+          case 'deliver':
+            // Send notification to admin about delivery
+            sendNotificationToAdmin(taskId, 'delivered', task);
+            return { ...task, status: 'delivered' };
+          default:
+            return task;
+        }
+      }
+      return task;
+    }));
+  };
 
-// for music 
- const [isPlaying, setIsPlaying] = useState(false); 
- const toggleMusic = () => {
-    const audio = document.getElementById("bg-audio") as HTMLAudioElement;
-    if (!audio) return;
+  const sendNotificationToAdmin = (taskId: string, action: string, task: Task) => {
+    const notification = {
+      id: Date.now().toString(),
+      type: action === 'rejected' ? 'warning' : 'success',
+      title: `Task ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+      message: `${task.customerName}'s ${task.serviceType} has been ${action}`,
+      timestamp: new Date().toISOString(),
+      read: false,
+      taskId: taskId,
+      employeeId: user?.sub || 'emp001',
+      employeeName: user?.username || 'John Employee'
+    };
+    
+    // In a real app, this would send to backend/WebSocket
+    console.log('📤 Notification sent to admin:', notification);
+    
+    // Add to local notifications for demo
+    addNotification(notification);
+  };
 
-    if (audio.paused) {
-      audio.play();
-      setIsPlaying(true);
-    } else {
-      audio.pause();
-      setIsPlaying(false);
+  const addNotification = (notification: any) => {
+    // Add to local notifications for demo
+    setNotifications(prev => [notification, ...prev]);
+    
+    // Show a toast notification
+    showToast(notification);
+  };
+
+  const showToast = (notification: any) => {
+    // Create a temporary toast notification
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white max-w-sm ${
+      notification.type === 'success' ? 'bg-green-500' : 
+      notification.type === 'warning' ? 'bg-yellow-500' : 
+      notification.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+    }`;
+    toast.innerHTML = `
+      <div class="flex items-center">
+        <div class="flex-1">
+          <p class="font-semibold">${notification.title}</p>
+          <p class="text-sm opacity-90">${notification.message}</p>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-white hover:text-gray-200">
+          ×
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (toast.parentElement) {
+        toast.remove();
+      }
+    }, 5000);
+  };
+
+  const startTimeTracking = (taskId: string) => {
+    // Stop any existing time tracking first
+    if (currentTimeLog) {
+      stopTimeTracking();
+    }
+    
+    const newTimeLog: TimeLog = {
+      id: Date.now().toString(),
+      taskId,
+      startTime: new Date().toISOString(),
+      status: 'active'
+    };
+    setCurrentTimeLog(newTimeLog);
+    setTimeLogs(prev => [...prev, newTimeLog]);
+    
+    // Update task status to in-progress
+    handleTaskAction(taskId, 'start');
+  };
+
+  const stopTimeTracking = () => {
+    if (currentTimeLog) {
+      const endTime = new Date().toISOString();
+      const duration = Math.floor((new Date(endTime).getTime() - new Date(currentTimeLog.startTime).getTime()) / (1000 * 60 * 60));
+      
+      setTimeLogs(prev => prev.map(log => 
+        log.id === currentTimeLog.id 
+          ? { ...log, endTime, duration, status: 'completed' }
+          : log
+      ));
+      setCurrentTimeLog(null);
+      
+      console.log(`⏱️ Time tracking stopped. Duration: ${duration} hours`);
     }
   };
-// for music 
 
+  const pauseTimeTracking = () => {
+    if (currentTimeLog) {
+      stopTimeTracking();
+      console.log('⏸️ Time tracking paused');
+    }
+  };
 
+  const resumeTimeTracking = (taskId: string) => {
+    startTimeTracking(taskId);
+    console.log('▶️ Time tracking resumed');
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'assigned': return 'bg-yellow-100 text-yellow-800';
+      case 'accepted': return 'bg-blue-100 text-blue-800';
+      case 'in-progress': return 'bg-orange-100 text-orange-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'delivered': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'bg-red-100 text-red-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const formatDuration = (startTime: string, endTime?: string) => {
+    const start = new Date(startTime);
+    const end = endTime ? new Date(endTime) : new Date();
+    const diffMs = end.getTime() - start.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  };
+
+  const Sidebar = () => (
+    <div className="w-64 bg-white shadow-lg rounded-l-2xl p-6">
+      <div className="flex items-center mb-8">
+        <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+          {user?.username?.charAt(0) || 'E'}
+        </div>
+        <div className="ml-3">
+          <h3 className="font-semibold text-gray-800">{user?.username || 'Employee'}</h3>
+          <p className="text-sm text-gray-500">{user?.email}</p>
+        </div>
+      </div>
+
+      <nav className="space-y-2">
+        {[
+          { id: 'dashboard', label: 'Dashboard', icon: Calendar },
+          { id: 'tasks', label: 'My Tasks', icon: Wrench },
+          { id: 'profile', label: 'Profile', icon: User },
+          { id: 'history', label: 'History', icon: History }
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id as any)}
+            className={`w-full flex items-center px-4 py-3 rounded-lg transition-colors ${
+              activeTab === id 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Icon className="w-5 h-5 mr-3" />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="mt-8 pt-6 border-t border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-sm font-medium text-gray-700">Availability</span>
+          <button
+            onClick={() => setIsAvailable(!isAvailable)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              isAvailable ? 'bg-green-600' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                isAvailable ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-xs text-gray-500">
+          {isAvailable ? 'Available for new tasks' : 'Currently unavailable'}
+        </p>
+      </div>
+    </div>
+  );
+
+  const DashboardTab = () => (
+    <div className="flex-1 p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+          {greeting}, {user?.username || 'Employee'}!
+        </h1>
+        <p className="text-gray-600">Here's your work overview for today</p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <Wrench className="w-6 h-6 text-blue-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Active Tasks</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {tasks.filter(t => t.status === 'in-progress').length}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-3 bg-green-100 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Completed Today</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {tasks.filter(t => t.status === 'completed' || t.status === 'delivered').length}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-3 bg-orange-100 rounded-lg">
+              <Timer className="w-6 h-6 text-orange-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Hours Worked</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {currentTimeLog ? formatDuration(currentTimeLog.startTime).split('h')[0] : '0'}h
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Current Task */}
+      {currentTimeLog && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-800">Currently Working On</h3>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-gray-600">Timer Active</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-gray-800">
+                {tasks.find(t => t.id === currentTimeLog.taskId)?.customerName}
+              </p>
+              <p className="text-sm text-gray-600">
+                {tasks.find(t => t.id === currentTimeLog.taskId)?.description}
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                Status: {tasks.find(t => t.id === currentTimeLog.taskId)?.status.replace('-', ' ')}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold text-blue-600">
+                {formatDuration(currentTimeLog.startTime)}
+              </p>
+              <div className="flex space-x-2 mt-2">
+                <button
+                  onClick={pauseTimeTracking}
+                  className="px-3 py-1 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm"
+                >
+                  <Pause className="w-3 h-3 inline mr-1" />
+                  Pause
+                </button>
+                <button
+                  onClick={() => {
+                    stopTimeTracking();
+                    handleTaskAction(currentTimeLog.taskId, 'complete');
+                  }}
+                  className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                >
+                  <CheckCircle className="w-3 h-3 inline mr-1" />
+                  Finish
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workflow Status */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Workflow Status</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-yellow-600 font-bold">
+                {tasks.filter(t => t.status === 'assigned').length}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Assigned</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-blue-600 font-bold">
+                {tasks.filter(t => t.status === 'accepted').length}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Accepted</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-orange-600 font-bold">
+                {tasks.filter(t => t.status === 'in-progress').length}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">In Progress</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-green-600 font-bold">
+                {tasks.filter(t => t.status === 'completed' || t.status === 'delivered').length}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">Completed</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Tasks */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Tasks</h3>
+        <div className="space-y-3">
+          {tasks.slice(0, 3).map((task) => (
+            <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${
+                  task.status === 'in-progress' ? 'bg-orange-500' :
+                  task.status === 'completed' ? 'bg-green-500' :
+                  task.status === 'delivered' ? 'bg-purple-500' : 'bg-gray-400'
+                }`}></div>
+                <div>
+                  <p className="font-medium text-gray-800">{task.customerName}</p>
+                  <p className="text-sm text-gray-600">{task.description}</p>
+                </div>
+              </div>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                {task.status.replace('-', ' ')}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const TasksTab = () => (
+    <div className="flex-1 p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">My Tasks</h1>
+        <p className="text-gray-600">Manage your assigned tasks and track progress</p>
+      </div>
+
+      <div className="space-y-4">
+        {tasks.map((task) => (
+          <motion.div
+            key={task.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-xl p-6 shadow-sm border border-gray-200"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <div className="flex items-center space-x-3 mb-2">
+                  <h3 className="text-lg font-semibold text-gray-800">{task.customerName}</h3>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                    {task.priority}
+                  </span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                    {task.status.replace('-', ' ')}
+                  </span>
+                </div>
+                <p className="text-gray-600 mb-2">{task.vehicleInfo}</p>
+                <p className="text-gray-800 mb-2">{task.description}</p>
+                {task.instructions && (
+                  <p className="text-sm text-blue-600 bg-blue-50 p-2 rounded-lg">
+                    <strong>Instructions:</strong> {task.instructions}
+                  </p>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-500">Est. {task.estimatedHours}h</p>
+                <p className="text-sm text-gray-500">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                {task.serviceType === 'service' ? (
+                  <Car className="w-4 h-4 text-blue-600" />
+                ) : (
+                  <Wrench className="w-4 h-4 text-orange-600" />
+                )}
+                <span className="text-sm text-gray-600 capitalize">{task.serviceType}</span>
+              </div>
+
+              <div className="flex space-x-2">
+                {task.status === 'assigned' && (
+                  <>
+                    <button
+                      onClick={() => handleTaskAction(task.id, 'accept')}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleTaskAction(task.id, 'reject')}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center"
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Reject
+                    </button>
+                  </>
+                )}
+
+                {task.status === 'accepted' && (
+                  <button
+                    onClick={() => startTimeTracking(task.id)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Start Work & Timer
+                  </button>
+                )}
+
+                {task.status === 'in-progress' && (
+                  <div className="flex space-x-2">
+                    {currentTimeLog && currentTimeLog.taskId === task.id ? (
+                      <>
+                        <button
+                          onClick={pauseTimeTracking}
+                          className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors flex items-center"
+                        >
+                          <Pause className="w-4 h-4 mr-2" />
+                          Pause
+                        </button>
+                        <button
+                          onClick={() => {
+                            stopTimeTracking();
+                            handleTaskAction(task.id, 'complete');
+                          }}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Finish & Complete
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => resumeTimeTracking(task.id)}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                        >
+                          <Play className="w-4 h-4 mr-2" />
+                          Resume Timer
+                        </button>
+                        <button
+                          onClick={() => {
+                            stopTimeTracking();
+                            handleTaskAction(task.id, 'complete');
+                          }}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Finish & Complete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {task.status === 'completed' && (
+          <button
+                    onClick={() => handleTaskAction(task.id, 'deliver')}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Mark Delivered
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const ProfileTab = () => (
+    <div className="flex-1 p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">Profile</h1>
+        <p className="text-gray-600">Manage your employee profile and settings</p>
+      </div>
+
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+        <div className="flex items-center mb-6">
+          <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-2xl">
+            {user?.username?.charAt(0) || 'E'}
+          </div>
+          <div className="ml-6">
+            <h3 className="text-xl font-semibold text-gray-800">{user?.username || 'Employee'}</h3>
+            <p className="text-gray-600">{user?.email}</p>
+            <p className="text-sm text-gray-500">Employee ID: EMP001</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-semibold text-gray-800 mb-4">Personal Information</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  defaultValue={user?.username || 'Employee Name'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  defaultValue={user?.email || 'employee@revamp.com'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  defaultValue="+1 (555) 123-4567"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-gray-800 mb-4">Work Information</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <input
+                  type="text"
+                  defaultValue="Service Department"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Specialization</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option>General Service</option>
+                  <option>Engine Specialist</option>
+                  <option>Transmission Expert</option>
+                  <option>Electrical Systems</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Experience Level</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option>Junior (0-2 years)</option>
+                  <option>Mid-level (2-5 years)</option>
+                  <option>Senior (5+ years)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const HistoryTab = () => (
+    <div className="flex-1 p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">Work History</h1>
+        <p className="text-gray-600">Track your completed tasks and time logs</p>
+      </div>
+
+      <div className="space-y-4">
+        {timeLogs.map((log) => {
+          const task = tasks.find(t => t.id === log.taskId);
+          return (
+            <div key={log.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-800">{task?.customerName}</h3>
+                  <p className="text-gray-600">{task?.description}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-blue-600">
+                    {formatDuration(log.startTime, log.endTime)}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {new Date(log.startTime).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                <span>Started: {new Date(log.startTime).toLocaleTimeString()}</span>
+                {log.endTime && (
+                  <span>Ended: {new Date(log.endTime).toLocaleTimeString()}</span>
+                )}
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  log.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {log.status}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
-    
-    <main className="min-h-screen flex flex-col items-center justify-center bg-yellow-50 px-4 relative">
-      
-      {/* Back to Home button in top-right */}
-      <div className="absolute top-4 right-4">
-        <Link href="/">
-          <button className="px-3 py-2 text-sm rounded-lg bg-gray-800 text-white hover:bg-gray-900 transition">
-            Back to Home
-          </button>
-        </Link>
-      </div>
-
-      <div className="bg-white shadow-lg rounded-2xl p-8 w-full max-w-md text-center">
-        <h1 className="text-2xl font-bold mb-4">{greeting}, {user?.username || "Employee"}!</h1>
-        <p className="text-gray-700 mb-2">Role: {user?.role || "EMPLOYEE"}</p>
-        <p className="text-gray-700">Email: {user?.email || "employee@revamp.com"}</p>
-
-                             {/* for  Music */}
-    
-          <div className="mt-6">
-          <button
-            onClick={toggleMusic}
-            className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition">
-            {isPlaying ? "⏸ Pause Music" : "click ME"}
-          </button>
-          <audio id="bg-audio" src="/music/theme2.mp3" loop  />
+    <div className="min-h-screen bg-gray-50 flex">
+      <Sidebar />
+      <div className="flex-1 flex flex-col">
+        <div className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link href="/">
+                <button className="px-3 py-2 text-sm rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+                  ← Back to Home
+                </button>
+              </Link>
+              <div className="h-6 w-px bg-gray-300"></div>
+              <h2 className="text-lg font-semibold text-gray-800">
+                {activeTab === 'dashboard' && 'Dashboard'}
+                {activeTab === 'tasks' && 'My Tasks'}
+                {activeTab === 'profile' && 'Profile'}
+                {activeTab === 'history' && 'Work History'}
+              </h2>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition">
+                <Bell className="w-5 h-5" />
+              </button>
+              <button className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition">
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
         </div>
-                          {/* for  Music  */}
 
+        <AnimatePresence mode="wait">
+          {activeTab === 'dashboard' && <DashboardTab />}
+          {activeTab === 'tasks' && <TasksTab />}
+          {activeTab === 'profile' && <ProfileTab />}
+          {activeTab === 'history' && <HistoryTab />}
+        </AnimatePresence>
       </div>
-    </main>
+    </div>
   );
 }
 
