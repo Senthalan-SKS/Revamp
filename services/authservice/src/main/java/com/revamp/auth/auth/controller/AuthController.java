@@ -8,15 +8,20 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.revamp.auth.auth.model.EmployeeDetail;
 import com.revamp.auth.auth.model.User;
 import com.revamp.auth.auth.repository.UserRepository;
 import com.revamp.auth.auth.service.AuthService;
+import com.revamp.auth.auth.service.EmployeeDetailService;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -28,6 +33,9 @@ public class AuthController {
     
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private EmployeeDetailService employeeDetailService;
 
     // ✅ Inner DTOs must be static + public
     public static class RegisterRequest {
@@ -92,9 +100,10 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
             User created = authService.register(req.username, req.email, req.password, "EMPLOYEE");
             created.setPasswordHash(null); // Don't return password hash
 
+            // Return user data so frontend can use the ID for employee details
             return ResponseEntity
                 .status(201)
-                .body(Collections.singletonMap("message", "Employee registered successfully"));
+                .body(created);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest()
                     .body(Collections.singletonMap("message", ex.getMessage()));
@@ -115,6 +124,174 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
         } catch (Exception ex) {
             return ResponseEntity.status(500)
                     .body(Collections.singletonMap("message", "Error fetching employees: " + ex.getMessage()));
+        }
+    }
+
+    // Employee Details DTO
+    public static class EmployeeDetailRequest {
+        public String userId;
+        public String fullName;
+        public String email;
+        public String phoneNumber;
+        public String[] skills;
+    }
+
+    // Add employee details
+    @PostMapping("/employee-details")
+    public ResponseEntity<?> addEmployeeDetails(@RequestBody EmployeeDetailRequest req) {
+        try {
+            // Check if user exists
+            User user = userRepository.findById(req.userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            // Check if details already exist
+            if (employeeDetailService.existsByEmail(req.email)) {
+                return ResponseEntity.badRequest()
+                    .body(Collections.singletonMap("message", "Employee details already exist"));
+            }
+            
+            EmployeeDetail detail = new EmployeeDetail(
+                req.userId,
+                req.fullName,
+                req.email,
+                req.phoneNumber,
+                req.skills
+            );
+            
+            EmployeeDetail saved = employeeDetailService.save(detail);
+            return ResponseEntity.status(201).body(saved);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest()
+                    .body(Collections.singletonMap("message", "Error saving employee details: " + ex.getMessage()));
+        }
+    }
+
+    // Get all employee details
+    @GetMapping("/employee-details")
+    public ResponseEntity<?> getAllEmployeeDetails() {
+        try {
+            List<EmployeeDetail> details = employeeDetailService.findAllByOrderByFullName();
+            return ResponseEntity.ok(details);
+        } catch (Exception ex) {
+            return ResponseEntity.status(500)
+                    .body(Collections.singletonMap("message", "Error fetching employee details: " + ex.getMessage()));
+        }
+    }
+
+    // Get employee details by userId
+    @GetMapping("/employee-details/{userId}")
+    public ResponseEntity<?> getEmployeeDetailsByUserId(@PathVariable String userId) {
+        try {
+            EmployeeDetail detail = employeeDetailService.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("Employee details not found"));
+            return ResponseEntity.ok(detail);
+        } catch (Exception ex) {
+            return ResponseEntity.status(404)
+                    .body(Collections.singletonMap("message", ex.getMessage()));
+        }
+    }
+
+    // Delete employee (both User and EmployeeDetail)
+    @DeleteMapping("/employees/{userId}")
+    public ResponseEntity<?> deleteEmployee(@PathVariable String userId) {
+        try {
+            // Check if user exists
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Employee not found"));
+            
+            // Only allow deletion of employees
+            if (!"EMPLOYEE".equals(user.getRole())) {
+                return ResponseEntity.badRequest()
+                    .body(Collections.singletonMap("message", "Only employees can be deleted through this endpoint"));
+            }
+            
+            // Delete employee details first (if exists)
+            employeeDetailService.findByUserId(userId).ifPresent(detail -> {
+                employeeDetailService.delete(detail.getId());
+            });
+            
+            // Delete user
+            userRepository.deleteById(userId);
+            
+            return ResponseEntity.ok(Collections.singletonMap("message", "Employee deleted successfully"));
+        } catch (Exception ex) {
+            return ResponseEntity.status(404)
+                    .body(Collections.singletonMap("message", ex.getMessage()));
+        }
+    }
+
+    // Delete employee details by userId
+    @DeleteMapping("/employee-details/{userId}")
+    public ResponseEntity<?> deleteEmployeeDetails(@PathVariable String userId) {
+        try {
+            EmployeeDetail detail = employeeDetailService.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("Employee details not found"));
+            
+            employeeDetailService.delete(detail.getId());
+            return ResponseEntity.ok(Collections.singletonMap("message", "Employee details deleted successfully"));
+        } catch (Exception ex) {
+            return ResponseEntity.status(404)
+                    .body(Collections.singletonMap("message", ex.getMessage()));
+        }
+    }
+
+    // Update employee (User)
+    @PutMapping("/employees/{userId}")
+    public ResponseEntity<?> updateEmployee(@PathVariable String userId, @RequestBody RegisterRequest req) {
+        try {
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Employee not found"));
+            
+            // Only allow updating employees
+            if (!"EMPLOYEE".equals(user.getRole())) {
+                return ResponseEntity.badRequest()
+                    .body(Collections.singletonMap("message", "Only employees can be updated through this endpoint"));
+            }
+            
+            // Update user fields
+            if (req.username != null && !req.username.isEmpty()) {
+                user.setUsername(req.username);
+            }
+            if (req.email != null && !req.email.isEmpty()) {
+                user.setEmail(req.email);
+            }
+            
+            User updated = userRepository.save(user);
+            updated.setPasswordHash(null);
+            
+            return ResponseEntity.ok(updated);
+        } catch (Exception ex) {
+            return ResponseEntity.status(404)
+                    .body(Collections.singletonMap("message", ex.getMessage()));
+        }
+    }
+
+    // Update employee details
+    @PutMapping("/employee-details/{userId}")
+    public ResponseEntity<?> updateEmployeeDetails(@PathVariable String userId, @RequestBody EmployeeDetailRequest req) {
+        try {
+            EmployeeDetail detail = employeeDetailService.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("Employee details not found"));
+            
+            // Update fields
+            if (req.fullName != null && !req.fullName.isEmpty()) {
+                detail.setFullName(req.fullName);
+            }
+            if (req.email != null && !req.email.isEmpty()) {
+                detail.setEmail(req.email);
+            }
+            if (req.phoneNumber != null) {
+                detail.setPhoneNumber(req.phoneNumber);
+            }
+            if (req.skills != null) {
+                detail.setSkills(req.skills);
+            }
+            
+            EmployeeDetail updated = employeeDetailService.update(detail);
+            return ResponseEntity.ok(updated);
+        } catch (Exception ex) {
+            return ResponseEntity.status(404)
+                    .body(Collections.singletonMap("message", ex.getMessage()));
         }
     }
 

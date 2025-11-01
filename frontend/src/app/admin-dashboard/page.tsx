@@ -251,27 +251,45 @@ export default function AdminDashboard() {
   const loadEmployees = async () => {
     try {
       const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
-      const response = await fetch(`${GATEWAY_URL}/api/auth/employees`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
       
-      if (response.ok) {
-        const data = await response.json();
-        // Convert User data to Employee format for UI
-        const employeeData: Employee[] = data.map((user: any, index: number) => ({
-          id: user.id || String(index + 1),
-          name: user.username,
-          email: user.email,
-          skillSet: [], // Skills not stored in User model yet
-          availability: "Available" as const,
-          currentProjects: 0,
-          completedProjects: 0,
-          averageCompletionTime: "0 hours",
-          joinDate: undefined
-        }));
+      // Fetch both employees and their details
+      const [employeesResponse, detailsResponse] = await Promise.all([
+        fetch(`${GATEWAY_URL}/api/auth/employees`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }),
+        fetch(`${GATEWAY_URL}/api/auth/employee-details`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        })
+      ]);
+      
+      if (employeesResponse.ok) {
+        const employeesData = await employeesResponse.json();
+        const detailsData = detailsResponse.ok ? await detailsResponse.json() : [];
+        
+        // Create a map of userId -> employee details for quick lookup
+        const detailsMap = new Map();
+        detailsData.forEach((detail: any) => {
+          detailsMap.set(detail.userId, detail);
+        });
+        
+        // Convert User data to Employee format, merging with employee details
+        const employeeData: Employee[] = employeesData.map((user: any, index: number) => {
+          const details = detailsMap.get(user.id);
+          return {
+            id: user.id || String(index + 1),
+            name: details?.fullName || user.username,
+            email: user.email,
+            skillSet: details?.skills || [],
+            availability: "Available" as const,
+            currentProjects: 0,
+            completedProjects: 0,
+            averageCompletionTime: "0 hours",
+            phone: details?.phoneNumber || undefined,
+            joinDate: undefined
+          };
+        });
         setEmployees(employeeData);
       } else {
         console.error("Failed to load employees");
@@ -382,22 +400,79 @@ export default function AdminDashboard() {
     }
     
     if (employeeForm.isEdit && selectedEmployee) {
-      // Edit functionality (keep local for now, can add API later)
-      setEmployees(employees.map(emp =>
-        emp.id === selectedEmployee.id
-          ? {
-              ...emp,
-              name: employeeForm.name,
+      // Update employee in database
+      try {
+        const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+        
+        console.log("Updating employee with ID:", selectedEmployee.id);
+        
+        // Update both User and EmployeeDetail in parallel
+        const [userResponse, detailsResponse] = await Promise.all([
+          fetch(`${GATEWAY_URL}/api/auth/employees/${selectedEmployee.id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              username: employeeForm.name,
               email: employeeForm.email,
-              phone: employeeForm.phone,
-              skillSet: employeeForm.skillSet
-            }
-          : emp
-      ));
-      showToast("Employee updated successfully!");
-      setEmployeeForm({ name: "", email: "", password: "", phone: "", skillSet: [], isEdit: false });
-      setShowEditEmployeeModal(false);
-      setSelectedEmployee(null);
+            }),
+          }),
+          fetch(`${GATEWAY_URL}/api/auth/employee-details/${selectedEmployee.id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId: selectedEmployee.id,
+              fullName: employeeForm.name,
+              email: employeeForm.email,
+              phoneNumber: employeeForm.phone || "",
+              skills: employeeForm.skillSet,
+            }),
+          })
+        ]);
+
+        if (!userResponse.ok) {
+          const errorData = await userResponse.json().catch(() => ({ message: "Failed to update employee" }));
+          throw new Error(errorData.message || "Failed to update employee");
+        }
+
+        // Details update is optional (might not exist)
+        if (!detailsResponse.ok) {
+          console.warn("Employee user updated but details update failed or doesn't exist");
+          // Try to create details if they don't exist
+          try {
+            await fetch(`${GATEWAY_URL}/api/auth/employee-details`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId: selectedEmployee.id,
+                fullName: employeeForm.name,
+                email: employeeForm.email,
+                phoneNumber: employeeForm.phone || "",
+                skills: employeeForm.skillSet,
+              }),
+            });
+          } catch (createError) {
+            console.warn("Could not create employee details:", createError);
+          }
+        }
+
+        showToast("Employee updated successfully in database!");
+        
+        // Reload employees to get updated data
+        loadEmployees();
+        
+        setEmployeeForm({ name: "", email: "", password: "", phone: "", skillSet: [], isEdit: false });
+        setShowEditEmployeeModal(false);
+        setSelectedEmployee(null);
+      } catch (error: any) {
+        console.error("Error updating employee:", error);
+        showToast(error.message || "Failed to update employee. Please try again.", "error");
+      }
     } else {
       // Register new employee - Save to database
       try {
@@ -416,13 +491,59 @@ export default function AdminDashboard() {
         });
 
         const data = await response.json();
+        
+        console.log("Register employee response:", data);
+        console.log("Employee ID:", data.id);
 
         if (!response.ok) {
           throw new Error(data.message || "Failed to register employee");
         }
 
-        // Employee successfully saved to database
-        showToast("Employee registered successfully and saved to database!");
+        // Step 2: Save employee details to EAD-Employes database (if user was created successfully and has an ID)
+        if (data.id) {
+          console.log("Saving employee details to EAD-Employes database...");
+          console.log("Employee details payload:", {
+            userId: data.id,
+            fullName: employeeForm.name,
+            email: employeeForm.email,
+            phoneNumber: employeeForm.phone || "",
+            skills: employeeForm.skillSet,
+          });
+          try {
+            const detailsResponse = await fetch(`${GATEWAY_URL}/api/auth/employee-details`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId: data.id,
+                fullName: employeeForm.name,
+                email: employeeForm.email,
+                phoneNumber: employeeForm.phone || "",
+                skills: employeeForm.skillSet,
+              }),
+            });
+
+            const detailsData = await detailsResponse.json();
+            
+            console.log("Employee details save response:", detailsData);
+            
+            if (!detailsResponse.ok) {
+              console.error("Failed to save employee details:", detailsData);
+              showToast("Employee registered but details could not be saved: " + (detailsData.message || "Unknown error"), "error");
+            } else {
+              console.log("✓ Employee details saved successfully to EAD-Employes database");
+              showToast("Employee registered successfully with all details saved!");
+            }
+          } catch (detailsError: any) {
+            console.error("Error saving employee details:", detailsError);
+            showToast("Employee registered but some details could not be saved: " + detailsError.message, "error");
+          }
+        } else {
+          console.warn("Employee registered but no ID returned, cannot save employee details");
+          console.warn("Response data:", data);
+          showToast("Employee registered successfully, but employee details could not be saved (no ID returned)");
+        }
         
         // Reset form
         setEmployeeForm({ name: "", email: "", password: "", phone: "", skillSet: [], isEdit: false });
@@ -438,10 +559,53 @@ export default function AdminDashboard() {
     }
   };
 
-  const deleteEmployee = (id: string) => {
-    if (confirm("Are you sure you want to delete this employee?")) {
-      setEmployees(employees.filter(emp => emp.id !== id));
-      showToast("Employee deleted successfully!");
+  const deleteEmployee = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this employee? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      
+      console.log("Deleting employee with ID:", id);
+      
+      // Delete employee from User database (this also deletes employee details)
+      const userResponse = await fetch(`${GATEWAY_URL}/api/auth/employees/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      console.log("Delete response status:", userResponse.status);
+
+      if (userResponse.ok) {
+        const responseData = await userResponse.json().catch(() => null);
+        console.log("Delete successful:", responseData);
+        
+        setEmployees(employees.filter(emp => emp.id !== id));
+        showToast("Employee deleted successfully from database!");
+      } else {
+        // Try to parse error message
+        let errorMessage = "Failed to delete employee";
+        try {
+          const errorData = await userResponse.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+          console.error("Delete failed with response:", errorData);
+        } catch (parseError) {
+          // If response is not JSON, check status
+          if (userResponse.status === 404) {
+            errorMessage = "Employee not found";
+          } else if (userResponse.status === 500) {
+            errorMessage = "Server error while deleting employee";
+          } else {
+            errorMessage = `Failed to delete employee (Status: ${userResponse.status})`;
+          }
+          console.error("Delete failed - Status:", userResponse.status);
+        }
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error("Error deleting employee:", error);
+      showToast(error.message || "Failed to delete employee. Please try again.", "error");
     }
   };
 
