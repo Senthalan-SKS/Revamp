@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getGreeting } from "../../utils/greeting";
 import { decodeToken, TokenPayload } from "../../utils/jwt";
 import { 
@@ -182,56 +182,7 @@ export default function AdminDashboard() {
     }
   ]);
 
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: "1",
-      name: "Mike Johnson",
-      email: "mike@revamp.com",
-      skillSet: ["Engine", "Electronics", "Bodywork"],
-      availability: "Available",
-      currentProjects: 1,
-      completedProjects: 45,
-      averageCompletionTime: "4.2 hours",
-      phone: "+1 234-567-8900",
-      joinDate: "2023-01-15"
-    },
-    {
-      id: "2",
-      name: "Sarah Williams",
-      email: "sarah@revamp.com",
-      skillSet: ["Interior", "Painting", "Detailing"],
-      availability: "Busy",
-      currentProjects: 3,
-      completedProjects: 38,
-      averageCompletionTime: "5.1 hours",
-      phone: "+1 234-567-8901",
-      joinDate: "2023-02-20"
-    },
-    {
-      id: "3",
-      name: "David Lee",
-      email: "david@revamp.com",
-      skillSet: ["Engine", "Transmission", "Performance"],
-      availability: "Available",
-      currentProjects: 1,
-      completedProjects: 52,
-      averageCompletionTime: "3.8 hours",
-      phone: "+1 234-567-8902",
-      joinDate: "2022-11-10"
-    },
-    {
-      id: "4",
-      name: "Lisa Anderson",
-      email: "lisa@revamp.com",
-      skillSet: ["Interior", "Electronics", "Audio"],
-      availability: "On Leave",
-      currentProjects: 0,
-      completedProjects: 29,
-      averageCompletionTime: "4.5 hours",
-      phone: "+1 234-567-8903",
-      joinDate: "2023-03-05"
-    }
-  ]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   const [employeeLogs, setEmployeeLogs] = useState<EmployeeLog[]>([
     {
@@ -297,6 +248,41 @@ export default function AdminDashboard() {
     isEdit: false
   });
 
+  const loadEmployees = async () => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const response = await fetch(`${GATEWAY_URL}/api/auth/employees`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Convert User data to Employee format for UI
+        const employeeData: Employee[] = data.map((user: any, index: number) => ({
+          id: user.id || String(index + 1),
+          name: user.username,
+          email: user.email,
+          skillSet: [], // Skills not stored in User model yet
+          availability: "Available" as const,
+          currentProjects: 0,
+          completedProjects: 0,
+          averageCompletionTime: "0 hours",
+          joinDate: undefined
+        }));
+        setEmployees(employeeData);
+      } else {
+        console.error("Failed to load employees");
+        // Keep empty array, will show "No employees found"
+      }
+    } catch (error) {
+      console.error("Error loading employees:", error);
+      // Keep empty array on error
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -310,6 +296,9 @@ export default function AdminDashboard() {
         confirmPassword: ""
       });
     }
+    
+    // Load employees from database
+    loadEmployees();
   }, []);
 
   const greeting = getGreeting();
@@ -385,7 +374,7 @@ export default function AdminDashboard() {
     setShowEditEmployeeModal(true);
   };
 
-  const addEmployee = (e: React.FormEvent) => {
+  const addEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (employeeForm.skillSet.length === 0) {
       showToast("Please select at least one skill", "error");
@@ -393,6 +382,7 @@ export default function AdminDashboard() {
     }
     
     if (employeeForm.isEdit && selectedEmployee) {
+      // Edit functionality (keep local for now, can add API later)
       setEmployees(employees.map(emp =>
         emp.id === selectedEmployee.id
           ? {
@@ -405,25 +395,47 @@ export default function AdminDashboard() {
           : emp
       ));
       showToast("Employee updated successfully!");
+      setEmployeeForm({ name: "", email: "", password: "", phone: "", skillSet: [], isEdit: false });
+      setShowEditEmployeeModal(false);
+      setSelectedEmployee(null);
     } else {
-      const newEmployee: Employee = {
-        id: String(employees.length + 1),
-        name: employeeForm.name,
-        email: employeeForm.email,
-        skillSet: employeeForm.skillSet,
-        availability: "Available",
-        currentProjects: 0,
-        completedProjects: 0,
-        averageCompletionTime: "0 hours",
-        phone: employeeForm.phone,
-        joinDate: new Date().toISOString().split('T')[0]
-      };
-      setEmployees([...employees, newEmployee]);
-      showToast("Employee added successfully!");
+      // Register new employee - Save to database
+      try {
+        const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+        
+        const response = await fetch(`${GATEWAY_URL}/api/auth/register-employee`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: employeeForm.name,
+            email: employeeForm.email,
+            password: employeeForm.password,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to register employee");
+        }
+
+        // Employee successfully saved to database
+        showToast("Employee registered successfully and saved to database!");
+        
+        // Reset form
+        setEmployeeForm({ name: "", email: "", password: "", phone: "", skillSet: [], isEdit: false });
+        setShowEditEmployeeModal(false);
+        setSelectedEmployee(null);
+        
+        // Reload employees from database to get the new one
+        loadEmployees();
+      } catch (error: any) {
+        console.error("Error registering employee:", error);
+        showToast(error.message || "Failed to register employee. Please try again.", "error");
+      }
     }
-    setEmployeeForm({ name: "", email: "", password: "", phone: "", skillSet: [], isEdit: false });
-    setShowEditEmployeeModal(false);
-    setSelectedEmployee(null);
   };
 
   const deleteEmployee = (id: string) => {

@@ -51,6 +51,11 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 
+// Log environment variables for debugging
+console.log("Environment variables loaded:");
+console.log("PORT:", process.env.PORT);
+console.log("AUTH_SERVICE:", process.env.AUTH_SERVICE);
+
 // Import routes
 const authRoutes = require("./routes/authRoutes");
 
