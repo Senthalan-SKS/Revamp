@@ -1,0 +1,5 @@
+# Git ignore file
+
+# Spring Boot application.properties (contains sensitive credentials)
+services/*/src/main/resources/application.properties
+!services/*/src/main/resources/application.properties.example

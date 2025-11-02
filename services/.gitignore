@@ -36,11 +36,12 @@ yarn-error.log*
 next-env.d.ts
 
 # Spring Boot application.properties (contains sensitive credentials)
-services/authservice/src/main/resources/application.properties
-services/employeeservice/src/main/resources/application.properties
+# Paths are relative to services/ directory
+authservice/src/main/resources/application.properties
+employeeservice/src/main/resources/application.properties
 
 # Maven build artifacts (compiled classes and build output)
-services/*/target/
+*/target/
 **/target/
 
 # Maven wrapper jar (auto-downloaded, don't commit)
