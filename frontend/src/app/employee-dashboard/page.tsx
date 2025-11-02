@@ -52,12 +52,16 @@ export default function EmployeeDashboard() {
   const [currentTimeLog, setCurrentTimeLog] = useState<TimeLog | null>(null);
   const [isAvailable, setIsAvailable] = useState(true);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL as string;
+  const [employeeId, setEmployeeId] = useState<string>('EMP001');
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       const decoded = decodeToken(token);
       setUser(decoded);
+      const maybeEmp = decoded?.sub?.toUpperCase?.() || '';
+      setEmployeeId(maybeEmp.startsWith('EMP') ? maybeEmp : 'EMP001');
     } else {
       // Development bypass - create mock user for testing
       setUser({
@@ -66,10 +70,38 @@ export default function EmployeeDashboard() {
         email: "john.employee@revamp.com",
         role: "EMPLOYEE"
       });
+      setEmployeeId('EMP001');
     }
-    // Load mock data
-    loadMockData();
+    // Attempt to load from API; fallback to mock data
+    fetchTasks();
   }, []);
+
+  const fetchTasks = async () => {
+    try {
+      if (!GATEWAY_URL) throw new Error('GATEWAY_URL not set');
+      const res = await fetch(`${GATEWAY_URL}/api/tasks/employee/${employeeId}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to fetch tasks');
+      const data: any[] = await res.json();
+      // Normalize fields if needed
+      const normalized = data.map((t: any) => ({
+        id: t.id,
+        customerName: t.customerName,
+        vehicleInfo: t.vehicleInfo,
+        serviceType: t.serviceType,
+        description: t.description,
+        status: t.status,
+        priority: t.priority || 'medium',
+        estimatedHours: t.estimatedHours || 0,
+        assignedDate: t.assignedDate || new Date().toISOString(),
+        dueDate: t.dueDate || new Date().toISOString(),
+        instructions: t.instructions || ''
+      })) as Task[];
+      setTasks(normalized);
+    } catch (e) {
+      // Fallback to mock data for dev
+      loadMockData();
+    }
+  };
 
   const loadMockData = () => {
     setTasks([
@@ -133,32 +165,37 @@ export default function EmployeeDashboard() {
 
   const greeting = getGreeting();
 
-  const handleTaskAction = (taskId: string, action: 'accept' | 'reject' | 'start' | 'complete' | 'deliver') => {
-    setTasks(prev => prev.map(task => {
-      if (task.id === taskId) {
-        switch (action) {
-          case 'accept':
-            return { ...task, status: 'accepted' };
-          case 'reject':
-            // Send notification to admin about rejection
-            sendNotificationToAdmin(taskId, 'rejected', task);
-            return { ...task, status: 'assigned' }; // Keep as assigned for admin to reassign
-          case 'start':
-            return { ...task, status: 'in-progress' };
-          case 'complete':
-            // Send notification to admin about completion
-            sendNotificationToAdmin(taskId, 'completed', task);
-            return { ...task, status: 'completed' };
-          case 'deliver':
-            // Send notification to admin about delivery
-            sendNotificationToAdmin(taskId, 'delivered', task);
-            return { ...task, status: 'delivered' };
-          default:
-            return task;
-        }
-      }
-      return task;
-    }));
+  const handleTaskAction = async (taskId: string, action: 'accept' | 'reject' | 'start' | 'complete' | 'deliver') => {
+    try {
+      if (!GATEWAY_URL) throw new Error('GATEWAY_URL not set');
+      const res = await fetch(`${GATEWAY_URL}/api/tasks/${taskId}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId })
+      });
+      if (!res.ok) throw new Error('Task action failed');
+      const updated = await res.json();
+      setTasks(prev => prev.map(t => (t.id === taskId ? {
+        id: updated.id,
+        customerName: updated.customerName,
+        vehicleInfo: updated.vehicleInfo,
+        serviceType: updated.serviceType,
+        description: updated.description,
+        status: updated.status,
+        priority: updated.priority || t.priority,
+        estimatedHours: updated.estimatedHours || t.estimatedHours,
+        assignedDate: updated.assignedDate || t.assignedDate,
+        dueDate: updated.dueDate || t.dueDate,
+        instructions: updated.instructions || t.instructions,
+      } : t)));
+
+      if (action === 'reject') sendNotificationToAdmin(taskId, 'rejected', updated);
+      if (action === 'complete') sendNotificationToAdmin(taskId, 'completed', updated);
+      if (action === 'deliver') sendNotificationToAdmin(taskId, 'delivered', updated);
+    } catch (e) {
+      // Optimistic fallback
+      setTasks(prev => prev.map(task => task.id === taskId ? { ...task, status: action === 'start' ? 'in-progress' : action === 'accept' ? 'accepted' : action === 'complete' ? 'completed' : action === 'deliver' ? 'delivered' : task.status } : task));
+    }
   };
 
   const sendNotificationToAdmin = (taskId: string, action: string, task: Task) => {
@@ -219,30 +256,46 @@ export default function EmployeeDashboard() {
     }, 5000);
   };
 
-  const startTimeTracking = (taskId: string) => {
+  const startTimeTracking = async (taskId: string) => {
     // Stop any existing time tracking first
     if (currentTimeLog) {
       stopTimeTracking();
     }
-    
-    const newTimeLog: TimeLog = {
-      id: Date.now().toString(),
-      taskId,
-      startTime: new Date().toISOString(),
-      status: 'active'
-    };
-    setCurrentTimeLog(newTimeLog);
-    setTimeLogs(prev => [...prev, newTimeLog]);
-    
-    // Update task status to in-progress
-    handleTaskAction(taskId, 'start');
+    try {
+      await handleTaskAction(taskId, 'start');
+      if (!GATEWAY_URL) throw new Error('GATEWAY_URL not set');
+      const res = await fetch(`${GATEWAY_URL}/api/time-tracking/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId, taskId })
+      });
+      if (!res.ok) throw new Error('Failed to start time tracking');
+      const log = await res.json();
+      const tl: TimeLog = { id: log.id, taskId: log.taskId, startTime: log.startTime, status: 'active' };
+      setCurrentTimeLog(tl);
+      setTimeLogs(prev => [...prev, tl]);
+    } catch (e) {
+      // Local fallback
+      const newTimeLog: TimeLog = {
+        id: Date.now().toString(),
+        taskId,
+        startTime: new Date().toISOString(),
+        status: 'active'
+      };
+      setCurrentTimeLog(newTimeLog);
+      setTimeLogs(prev => [...prev, newTimeLog]);
+    }
   };
 
-  const stopTimeTracking = () => {
+  const stopTimeTracking = async () => {
     if (currentTimeLog) {
       const endTime = new Date().toISOString();
       const duration = Math.floor((new Date(endTime).getTime() - new Date(currentTimeLog.startTime).getTime()) / (1000 * 60 * 60));
-      
+      try {
+        if (GATEWAY_URL) {
+          await fetch(`${GATEWAY_URL}/api/time-tracking/stop/${currentTimeLog.id}`, { method: 'POST' });
+        }
+      } catch {}
       setTimeLogs(prev => prev.map(log => 
         log.id === currentTimeLog.id 
           ? { ...log, endTime, duration, status: 'completed' }
@@ -254,15 +307,27 @@ export default function EmployeeDashboard() {
     }
   };
 
-  const pauseTimeTracking = () => {
+  const pauseTimeTracking = async () => {
     if (currentTimeLog) {
-      stopTimeTracking();
+      try {
+        if (GATEWAY_URL) {
+          await fetch(`${GATEWAY_URL}/api/time-tracking/pause/${currentTimeLog.id}`, { method: 'POST' });
+        }
+      } catch {}
+      await stopTimeTracking();
       console.log('⏸️ Time tracking paused');
     }
   };
 
-  const resumeTimeTracking = (taskId: string) => {
-    startTimeTracking(taskId);
+  const resumeTimeTracking = async (taskId: string) => {
+    if (currentTimeLog) {
+      try {
+        if (GATEWAY_URL) {
+          await fetch(`${GATEWAY_URL}/api/time-tracking/resume/${currentTimeLog.id}`, { method: 'POST' });
+        }
+      } catch {}
+    }
+    await startTimeTracking(taskId);
     console.log('▶️ Time tracking resumed');
   };
 
