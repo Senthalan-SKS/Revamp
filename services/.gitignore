@@ -35,5 +35,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-#authService env
-authservice/src/main/resources/application.properties
+# Spring Boot application.properties (contains sensitive credentials)
+services/authservice/src/main/resources/application.properties
+services/employeeservice/src/main/resources/application.properties
+
+# Maven build artifacts
+services/*/target/
+services/*/target/
+services/employeeservice/src/main/resources/application.properties
