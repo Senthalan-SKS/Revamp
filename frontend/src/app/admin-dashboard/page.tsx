@@ -252,52 +252,122 @@ export default function AdminDashboard() {
     try {
       const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
       
+      console.log("Loading employees from:", `${GATEWAY_URL}/api/auth/employees`);
+      console.log("Loading employee details from:", `${GATEWAY_URL}/api/auth/employee-details`);
+      
       // Fetch both employees and their details
-      const [employeesResponse, detailsResponse] = await Promise.all([
-        fetch(`${GATEWAY_URL}/api/auth/employees`, {
+      let employeesResponse: Response;
+      let detailsResponse: Response | null = null;
+      
+      try {
+        employeesResponse = await fetch(`${GATEWAY_URL}/api/auth/employees`, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
-        }),
-        fetch(`${GATEWAY_URL}/api/auth/employee-details`, {
+        });
+      } catch (err: any) {
+        console.error("Network error fetching employees:", err);
+        throw new Error(`Failed to connect to gateway: ${err.message}`);
+      }
+      try {
+        detailsResponse = await fetch(`${GATEWAY_URL}/api/auth/employee-details`, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
-        })
-      ]);
+        });
+      } catch (err: any) {
+        console.error("Network error fetching employee details:", err);
+        // Will handle empty details data below
+      }
+      
+      console.log("Employees response status:", employeesResponse.status);
+      if (detailsResponse) {
+        console.log("Employee details response status:", detailsResponse.status);
+      } else {
+        console.log("Employee details response: failed to fetch");
+      }
       
       if (employeesResponse.ok) {
         const employeesData = await employeesResponse.json();
-        const detailsData = detailsResponse.ok ? await detailsResponse.json() : [];
+        console.log("Employees data received:", employeesData);
+        
+        let detailsData = [];
+        if (detailsResponse && detailsResponse.ok) {
+          detailsData = await detailsResponse.json();
+          console.log("Employee details data received:", detailsData);
+        } else {
+          if (detailsResponse && !detailsResponse.ok) {
+            const errorData = await detailsResponse.json().catch(() => ({}));
+            console.warn("Employee details fetch failed:", errorData);
+          }
+          console.warn("Employee details not available");
+          showToast("Warning: Could not load employee details. Employees will be shown with basic information only.", "info");
+        }
         
         // Create a map of userId -> employee details for quick lookup
         const detailsMap = new Map();
-        detailsData.forEach((detail: any) => {
-          detailsMap.set(detail.userId, detail);
-        });
+        if (Array.isArray(detailsData)) {
+          detailsData.forEach((detail: any) => {
+            if (detail && detail.userId) {
+              detailsMap.set(detail.userId, detail);
+            }
+          });
+        }
         
         // Convert User data to Employee format, merging with employee details
-        const employeeData: Employee[] = employeesData.map((user: any, index: number) => {
-          const details = detailsMap.get(user.id);
-          return {
-            id: user.id || String(index + 1),
-            name: details?.fullName || user.username,
-            email: user.email,
-            skillSet: details?.skills || [],
-            availability: "Available" as const,
-            currentProjects: 0,
-            completedProjects: 0,
-            averageCompletionTime: "0 hours",
-            phone: details?.phoneNumber || undefined,
-            joinDate: undefined
-          };
-        });
+        const employeeData: Employee[] = Array.isArray(employeesData) 
+          ? employeesData.map((user: any, index: number) => {
+              const details = detailsMap.get(user.id || user._id);
+              return {
+                id: user.id || user._id || String(index + 1),
+                name: details?.fullName || user.username || "Unknown",
+                email: user.email || "",
+                skillSet: details?.skills || (Array.isArray(details?.skills) ? details.skills : []),
+                availability: "Available" as const,
+                currentProjects: 0,
+                completedProjects: 0,
+                averageCompletionTime: "0 hours",
+                phone: details?.phoneNumber || undefined,
+                joinDate: undefined
+              };
+            })
+          : [];
+        
+        console.log("Processed employee data:", employeeData);
         setEmployees(employeeData);
+        
+        if (employeeData.length === 0) {
+          showToast("No employees found in database. Please add employees first.", "info");
+        } else {
+          showToast(`Loaded ${employeeData.length} employee(s) successfully`, "success");
+        }
       } else {
-        console.error("Failed to load employees");
-        // Keep empty array, will show "No employees found"
+        let errorData: any = { message: "Unknown error" };
+        try {
+          const responseText = await employeesResponse.text();
+          console.error("Failed to load employees - Response status:", employeesResponse.status);
+          console.error("Failed to load employees - Response text:", responseText);
+          
+          if (responseText) {
+            try {
+              errorData = JSON.parse(responseText);
+            } catch (e) {
+              errorData = { message: responseText || `HTTP ${employeesResponse.status} error` };
+            }
+          } else {
+            errorData = { message: `HTTP ${employeesResponse.status} - No response body` };
+          }
+        } catch (parseError) {
+          console.error("Error parsing error response:", parseError);
+          errorData = { message: `HTTP ${employeesResponse.status} error - Could not parse response` };
+        }
+        
+        console.error("Failed to load employees - Full error data:", errorData);
+        showToast(`Failed to load employees: ${errorData.message || "Server error. Check if MongoDB is connected and MONGO_URI is set."}`, "error");
+        setEmployees([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading employees:", error);
-      // Keep empty array on error
+      showToast(`Error loading employees: ${error.message || "Network error. Please check if the gateway and backend services are running."}`, "error");
+      setEmployees([]);
     }
   };
 

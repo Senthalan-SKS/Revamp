@@ -38,3 +38,4 @@ build/
 *.env
 application-local.properties
 setup-env.local.sh
+setup-env.sh

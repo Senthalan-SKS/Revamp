@@ -34,7 +34,7 @@ public class AuthController {
     @Autowired
     private UserRepository userRepository;
     
-    @Autowired
+    @Autowired(required = false)
     private EmployeeDetailService employeeDetailService;
 
     // ✅ Inner DTOs must be static + public
@@ -139,6 +139,11 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
     // Add employee details
     @PostMapping("/employee-details")
     public ResponseEntity<?> addEmployeeDetails(@RequestBody EmployeeDetailRequest req) {
+        if (employeeDetailService == null) {
+            return ResponseEntity.status(503)
+                .body(Collections.singletonMap("message", 
+                    "Employee details service is not configured. Please set EMPLOYEE_MONGO_URI environment variable."));
+        }
         try {
             // Check if user exists
             User user = userRepository.findById(req.userId)
@@ -169,6 +174,9 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
     // Get all employee details
     @GetMapping("/employee-details")
     public ResponseEntity<?> getAllEmployeeDetails() {
+        if (employeeDetailService == null) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
         try {
             List<EmployeeDetail> details = employeeDetailService.findAllByOrderByFullName();
             return ResponseEntity.ok(details);
@@ -181,6 +189,11 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
     // Get employee details by userId
     @GetMapping("/employee-details/{userId}")
     public ResponseEntity<?> getEmployeeDetailsByUserId(@PathVariable String userId) {
+        if (employeeDetailService == null) {
+            return ResponseEntity.status(503)
+                .body(Collections.singletonMap("message", 
+                    "Employee details service is not configured. Please set EMPLOYEE_MONGO_URI environment variable."));
+        }
         try {
             EmployeeDetail detail = employeeDetailService.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Employee details not found"));
@@ -205,10 +218,12 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
                     .body(Collections.singletonMap("message", "Only employees can be deleted through this endpoint"));
             }
             
-            // Delete employee details first (if exists)
-            employeeDetailService.findByUserId(userId).ifPresent(detail -> {
-                employeeDetailService.delete(detail.getId());
-            });
+            // Delete employee details first (if exists and service is available)
+            if (employeeDetailService != null) {
+                employeeDetailService.findByUserId(userId).ifPresent(detail -> {
+                    employeeDetailService.delete(detail.getId());
+                });
+            }
             
             // Delete user
             userRepository.deleteById(userId);
@@ -223,6 +238,11 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
     // Delete employee details by userId
     @DeleteMapping("/employee-details/{userId}")
     public ResponseEntity<?> deleteEmployeeDetails(@PathVariable String userId) {
+        if (employeeDetailService == null) {
+            return ResponseEntity.status(503)
+                .body(Collections.singletonMap("message", 
+                    "Employee details service is not configured. Please set EMPLOYEE_MONGO_URI environment variable."));
+        }
         try {
             EmployeeDetail detail = employeeDetailService.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Employee details not found"));
@@ -269,6 +289,11 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
     // Update employee details
     @PutMapping("/employee-details/{userId}")
     public ResponseEntity<?> updateEmployeeDetails(@PathVariable String userId, @RequestBody EmployeeDetailRequest req) {
+        if (employeeDetailService == null) {
+            return ResponseEntity.status(503)
+                .body(Collections.singletonMap("message", 
+                    "Employee details service is not configured. Please set EMPLOYEE_MONGO_URI environment variable."));
+        }
         try {
             EmployeeDetail detail = employeeDetailService.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Employee details not found"));
