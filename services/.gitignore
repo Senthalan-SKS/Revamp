@@ -39,7 +39,9 @@ next-env.d.ts
 services/authservice/src/main/resources/application.properties
 services/employeeservice/src/main/resources/application.properties
 
-# Maven build artifacts
+# Maven build artifacts (compiled classes and build output)
 services/*/target/
-services/*/target/
-services/employeeservice/src/main/resources/application.properties
+**/target/
+
+# Maven wrapper jar (auto-downloaded, don't commit)
+**/.mvn/wrapper/maven-wrapper.jar
