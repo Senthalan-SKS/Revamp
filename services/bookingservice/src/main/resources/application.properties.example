@@ -1,0 +1,10 @@
+# Spring Boot server
+server.port=8084
+
+# Booking MongoDB connection - Time-slot database
+# Replace with your MongoDB connection string
+# Example: mongodb+srv://USERNAME:PASSWORD@cluster.mongodb.net/Time-slot?retryWrites=true&w=majority
+spring.data.mongodb.uri=mongodb+srv://USERNAME:PASSWORD@cluster.mongodb.net/Time-slot?retryWrites=true&w=majority
+
+logging.level.org.springframework.web=INFO
+

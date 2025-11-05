@@ -85,7 +85,7 @@ lsof -ti:8084 | xargs kill -9
 
 **Solution:** Check the connection string in `src/main/resources/application.properties`:
 ```
-spring.data.mongodb.uri=mongodb+srv://Scholarshare:scholarshare@cluster0.mmj1r.mongodb.net/EAD-Bookings?retryWrites=true&w=majority
+spring.data.mongodb.uri=mongodb+srv://USERNAME:PASSWORD@cluster.mongodb.net/EAD-Bookings?retryWrites=true&w=majority
 ```
 
 ### Issue: Maven dependencies not downloading

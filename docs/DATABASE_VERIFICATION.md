@@ -3,7 +3,7 @@
 ## Database Information
 
 **Database Name:** `Time-slot` (with hyphen)
-**Connection String:** `mongodb+srv://Scholarshare:scholarshare@cluster0.mmj1r.mongodb.net/Time-slot?retryWrites=true&w=majority`
+**Connection String:** `mongodb+srv://USERNAME:PASSWORD@cluster.mongodb.net/Time-slot?retryWrites=true&w=majority`
 
 ## Collections in "Time-slot" Database
 
@@ -23,7 +23,7 @@ The booking service creates and uses these collections:
 ### Step 1: Access MongoDB Atlas
 1. Go to https://cloud.mongodb.com/
 2. Login with your credentials
-3. Select your cluster: `cluster0.mmj1r.mongodb.net`
+3. Select your cluster: `cluster.mongodb.net`
 
 ### Step 2: Browse Collections
 1. Click on "Browse Collections" button
@@ -83,7 +83,7 @@ This script will:
 
 **Possible causes:**
 1. **Wrong database name** - Make sure you're looking at `Time-slot` (with hyphen), not `Time_slot` or `Timeslot`
-2. **Wrong cluster** - Verify you're connected to `cluster0.mmj1r.mongodb.net`
+2. **Wrong cluster** - Verify you're connected to your MongoDB cluster
 3. **Collections not created yet** - Collections are created when first document is saved
 4. **Refresh needed** - Refresh MongoDB Atlas browser
 
@@ -126,7 +126,7 @@ After creating a booking for November 8th, 2025 at 8 AM:
 
 **Current Configuration:**
 - Database: `Time-slot`
-- Cluster: `cluster0.mmj1r.mongodb.net`
+- Cluster: Your MongoDB Atlas cluster
 - Collections: `timeslots`, `appointments`, `unavailabledates`
 
 **Note:** MongoDB collection names are case-sensitive. Make sure you're looking at the exact collection names as defined in the `@Document` annotations.
