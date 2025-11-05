@@ -568,16 +568,22 @@ export default function EmployeeDashboard() {
             <p className="text-sm text-white">Accepted</p>
           </div>
           <div className="text-center">
-            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-orange-600 font-bold">
+            <div 
+              className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2"
+              style={{ backgroundColor: '#6c4133ff' }}
+            >
+              <span className="font-bold text-white">
                 {tasks.filter(t => t.status === 'in-progress').length}
               </span>
             </div>
             <p className="text-sm text-white">In Progress</p>
           </div>
           <div className="text-center">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-green-600 font-bold">
+            <div 
+              className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2"
+              style={{ backgroundColor: '#00571cff' }}
+            >
+              <span className="font-bold text-white">
                 {tasks.filter(t => t.status === 'completed' || t.status === 'delivered').length}
               </span>
             </div>
@@ -592,19 +598,40 @@ export default function EmployeeDashboard() {
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Tasks</h3>
         <div className="space-y-3">
           {tasks.slice(0, 3).map((task) => (
-            <div key={task.id} className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }}>
+            <div 
+              key={task.id} 
+              className="flex items-center justify-between p-3 rounded-lg" 
+              style={{ 
+                backgroundColor: 
+                  task.status === 'in-progress' ? '#6c4133ff' :
+                  task.status === 'completed' ? '#00571cff' :
+                  task.status === 'delivered' ? '#a855f7' :
+                  task.status === 'assigned' ? '#eab308' :
+                  task.status === 'accepted' ? '#3b82f6' : 'rgba(0, 0, 0, 0.4)'
+              }}
+            >
               <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${
-                  task.status === 'in-progress' ? 'bg-orange-500' :
-                  task.status === 'completed' ? 'bg-green-500' :
-                  task.status === 'delivered' ? 'bg-purple-500' : 'bg-gray-400'
-                }`}></div>
+                <div 
+                  className="w-3 h-3 rounded-full"
+                  style={{
+                    backgroundColor: 
+                      task.status === 'in-progress' ? '#ffffff' :
+                      task.status === 'completed' ? '#ffffff' :
+                      task.status === 'delivered' ? '#ffffff' : '#ffffff'
+                  }}
+                ></div>
                 <div>
                   <p className="font-medium text-white">{task.customerName}</p>
                   <p className="text-sm text-gray-200">{task.description}</p>
                 </div>
               </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+              <span 
+                className="px-2 py-1 rounded-full text-xs font-medium"
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff'
+                }}
+              >
                 {task.status.replace('-', ' ')}
               </span>
             </div>
