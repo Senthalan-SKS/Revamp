@@ -40,6 +40,7 @@ type Appointment = {
   time: string;
   status: "Pending" | "Approved" | "In Progress" | "Completed" | "Delivered";
   assignedEmployee?: string;
+  assignedEmployees?: string[];
   modifications?: string[];
   customerEmail?: string;
   estimatedCost?: number;
@@ -98,9 +99,11 @@ export default function AdminDashboard() {
   const [showEditEmployeeModal, setShowEditEmployeeModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [notificationMessage, setNotificationMessage] = useState("");
-  const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
-  const [timeSlotData, setTimeSlotData] = useState({ date: "", time: "", action: "block" });
+  const [showUnavailableDateModal, setShowUnavailableDateModal] = useState(false);
+  const [unavailableDateData, setUnavailableDateData] = useState({ date: "", reason: "", description: "" });
+  const [unavailableDates, setUnavailableDates] = useState<Array<{id: string, date: string, reason: string, description?: string}>>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   
   // Search and filter states
@@ -118,69 +121,8 @@ export default function AdminDashboard() {
   });
   const [showPasswordSection, setShowPasswordSection] = useState(false);
 
-  // Enhanced mock data
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    {
-      id: "1",
-      customerName: "John Doe",
-      vehicle: "Toyota Camry 2020",
-      serviceType: "Service",
-      date: "2024-01-15",
-      time: "10:00 AM",
-      status: "Pending",
-      customerEmail: "john@example.com",
-      estimatedCost: 250
-    },
-    {
-      id: "2",
-      customerName: "Jane Smith",
-      vehicle: "Honda Civic 2019",
-      serviceType: "Modification",
-      date: "2024-01-16",
-      time: "2:00 PM",
-      status: "Approved",
-      assignedEmployee: "Mike Johnson",
-      modifications: ["Engine Tune-up", "Exhaust Upgrade"],
-      customerEmail: "jane@example.com",
-      estimatedCost: 1200
-    },
-    {
-      id: "3",
-      customerName: "Robert Brown",
-      vehicle: "Ford F-150 2021",
-      serviceType: "Service",
-      date: "2024-01-14",
-      time: "9:00 AM",
-      status: "In Progress",
-      assignedEmployee: "Sarah Williams",
-      customerEmail: "robert@example.com",
-      estimatedCost: 350
-    },
-    {
-      id: "4",
-      customerName: "Emily Davis",
-      vehicle: "BMW 3 Series 2022",
-      serviceType: "Modification",
-      date: "2024-01-13",
-      time: "11:00 AM",
-      status: "Completed",
-      assignedEmployee: "Mike Johnson",
-      modifications: ["Repainting", "Interior Upgrade"],
-      customerEmail: "emily@example.com",
-      estimatedCost: 2800
-    },
-    {
-      id: "5",
-      customerName: "Michael Chen",
-      vehicle: "Tesla Model 3 2023",
-      serviceType: "Service",
-      date: "2024-01-17",
-      time: "3:00 PM",
-      status: "Pending",
-      customerEmail: "michael@example.com",
-      estimatedCost: 300
-    }
-  ]);
+  // Appointments from database
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
 
@@ -247,6 +189,71 @@ export default function AdminDashboard() {
     skillSet: [] as string[],
     isEdit: false
   });
+
+  const formatTimeFromString = (timeStr: string): string => {
+    // Convert "08:00:00" to "8:00 AM" format
+    if (!timeStr) return "";
+    const [hours, minutes] = timeStr.split(":");
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+  };
+
+  const loadAppointments = async () => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      
+      console.log("Loading appointments from:", `${GATEWAY_URL}/api/bookings/appointments`);
+      
+      const response = await fetch(`${GATEWAY_URL}/api/bookings/appointments`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        const appointmentsData = await response.json();
+        console.log("Appointments data received:", appointmentsData);
+        
+        // Map booking service appointments to admin dashboard format
+        const mappedAppointments: Appointment[] = appointmentsData.map((apt: any) => ({
+          id: apt.id,
+          customerName: apt.customerName || "Unknown",
+          vehicle: apt.vehicle || "Unknown",
+          serviceType: apt.serviceType || "Service",
+          date: apt.date || "",
+          time: apt.time ? formatTimeFromString(apt.time) : "",
+          status: apt.status || "Pending",
+          assignedEmployee: apt.assignedEmployeeNames && apt.assignedEmployeeNames.length > 0 
+            ? apt.assignedEmployeeNames[0] 
+            : apt.assignedEmployee,
+          assignedEmployees: apt.assignedEmployeeNames || (apt.assignedEmployee ? [apt.assignedEmployee] : []),
+          modifications: apt.modifications || [],
+          customerEmail: apt.customerEmail || "",
+          estimatedCost: apt.estimatedCost || undefined
+        }));
+        
+        setAppointments(mappedAppointments);
+        console.log(`Loaded ${mappedAppointments.length} appointment(s) successfully`);
+        
+        if (mappedAppointments.length === 0) {
+          showToast("No appointments found in database.", "info");
+        } else {
+          showToast(`Loaded ${mappedAppointments.length} appointment(s) successfully`, "success");
+        }
+      } else {
+        console.error("Failed to load appointments - Response status:", response.status);
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to load appointments - Error:", errorData);
+        showToast("Failed to load appointments. Using empty list.", "error");
+        setAppointments([]);
+      }
+    } catch (error: any) {
+      console.error("Error loading appointments:", error);
+      showToast(`Error loading appointments: ${error.message || "Network error"}`, "error");
+      setAppointments([]);
+    }
+  };
 
   const loadEmployees = async () => {
     try {
@@ -385,8 +392,9 @@ export default function AdminDashboard() {
       });
     }
     
-    // Load employees from database
+    // Load employees and appointments from database
     loadEmployees();
+    loadAppointments();
   }, []);
 
   const greeting = getGreeting();
@@ -418,21 +426,68 @@ export default function AdminDashboard() {
     showToast("Appointment rejected", "info");
   };
 
-  const assignEmployee = (appointmentId: string, employeeId: string) => {
-    const employee = employees.find(emp => emp.id === employeeId);
-    setAppointments(appointments.map(apt => 
-      apt.id === appointmentId 
-        ? { ...apt, status: "Approved" as const, assignedEmployee: employee?.name }
-        : apt
-    ));
-    if (employee) {
-      setEmployees(employees.map(emp =>
-        emp.id === employeeId ? { ...emp, currentProjects: emp.currentProjects + 1, availability: "Busy" as const } : emp
-      ));
+  const assignEmployees = async (appointmentId: string, employeeIds: string[]) => {
+    if (employeeIds.length === 0) {
+      showToast("Please select at least one employee", "error");
+      return;
     }
-    setShowAssignModal(false);
-    setAnalytics({ ...analytics, pendingApprovals: Math.max(0, analytics.pendingApprovals - 1) });
-    showToast(`Employee ${employee?.name} assigned successfully!`);
+    
+    const selectedEmployees = employees.filter(emp => employeeIds.includes(emp.id));
+    const employeeNames = selectedEmployees.map(emp => emp.name);
+    
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      
+      console.log("Assigning employees to appointment:", appointmentId, employeeIds, employeeNames);
+      
+      const response = await fetch(`${GATEWAY_URL}/api/bookings/appointments/${appointmentId}/assign-employees`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeIds: employeeIds,
+          employeeNames: employeeNames
+        }),
+      });
+      
+      if (response.ok) {
+        const updatedAppointment = await response.json();
+        console.log("Appointment updated successfully:", updatedAppointment);
+        
+        // Update local state
+        setAppointments(appointments.map(apt => 
+          apt.id === appointmentId 
+            ? { 
+                ...apt, 
+                status: "Approved" as const, 
+                assignedEmployee: employeeNames[0],
+                assignedEmployees: employeeNames
+              }
+            : apt
+        ));
+        
+        // Update employee availability
+        setEmployees(employees.map(emp =>
+          employeeIds.includes(emp.id) 
+            ? { ...emp, currentProjects: emp.currentProjects + 1, availability: "Busy" as const } 
+            : emp
+        ));
+        
+        setShowAssignModal(false);
+        setSelectedEmployeeIds([]);
+        setAnalytics({ ...analytics, pendingApprovals: Math.max(0, analytics.pendingApprovals - 1) });
+        showToast(`${employeeNames.length} employee(s) assigned successfully!`);
+        
+        // Reload appointments to get the latest data
+        loadAppointments();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to assign employees:", errorData);
+        showToast(`Failed to assign employees: ${errorData.message || "Server error"}`, "error");
+      }
+    } catch (error: any) {
+      console.error("Error assigning employees:", error);
+      showToast(`Error assigning employees: ${error.message || "Network error"}`, "error");
+    }
   };
 
   const toggleSkill = (skill: string) => {
@@ -689,14 +744,70 @@ export default function AdminDashboard() {
     setNotificationMessage("");
   };
 
-  const adjustTimeSlot = () => {
-    if (!timeSlotData.date || !timeSlotData.time) {
-      showToast("Please fill in all fields", "error");
+  const loadUnavailableDates = async () => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const response = await fetch(`${GATEWAY_URL}/api/bookings/unavailable-dates`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        const dates = await response.json();
+        setUnavailableDates(dates);
+      }
+    } catch (error) {
+      console.error("Error loading unavailable dates:", error);
+    }
+  };
+
+  const addUnavailableDate = async () => {
+    if (!unavailableDateData.date || !unavailableDateData.reason) {
+      showToast("Please fill in date and reason", "error");
       return;
     }
-    showToast(`Time slot ${timeSlotData.action}ed successfully!`);
-    setShowTimeSlotModal(false);
-    setTimeSlotData({ date: "", time: "", action: "block" });
+    
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const response = await fetch(`${GATEWAY_URL}/api/bookings/unavailable-dates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: unavailableDateData.date,
+          reason: unavailableDateData.reason,
+          description: unavailableDateData.description || ""
+        }),
+      });
+      
+      if (response.ok) {
+        showToast("Unavailable date added successfully!", "success");
+        setUnavailableDateData({ date: "", reason: "", description: "" });
+        loadUnavailableDates();
+      } else {
+        showToast("Failed to add unavailable date", "error");
+      }
+    } catch (error) {
+      showToast("Error adding unavailable date", "error");
+    }
+  };
+
+  const removeUnavailableDate = async (id: string) => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const response = await fetch(`${GATEWAY_URL}/api/bookings/unavailable-dates/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        showToast("Unavailable date removed successfully!", "success");
+        loadUnavailableDates();
+      } else {
+        showToast("Failed to remove unavailable date", "error");
+      }
+    } catch (error) {
+      showToast("Error removing unavailable date", "error");
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -756,11 +867,14 @@ export default function AdminDashboard() {
           <p className="text-gray-500 mt-1">Welcome back! Here's what's happening today.</p>
         </div>
         <button
-          onClick={() => setShowTimeSlotModal(true)}
+          onClick={() => {
+            loadUnavailableDates();
+            setShowUnavailableDateModal(true);
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 shadow-md transition-all"
         >
           <Settings className="w-4 h-4" />
-          Adjust Time Slots
+          Manage Unavailable Dates
         </button>
       </div>
 
@@ -996,7 +1110,11 @@ export default function AdminDashboard() {
                         {apt.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{apt.assignedEmployee || "-"}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">
+                      {apt.assignedEmployees && apt.assignedEmployees.length > 0 
+                        ? apt.assignedEmployees.join(", ")
+                        : apt.assignedEmployee || "-"}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {apt.estimatedCost ? (
                         <span className="font-semibold text-green-600">${apt.estimatedCost}</span>
@@ -1006,40 +1124,22 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        {apt.status === "Pending" && (
-                          <>
-                            <button
-                              onClick={() => approveAppointment(apt.id)}
-                              className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"
-                              title="Approve"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedAppointment(apt);
-                                setShowAssignModal(true);
-                              }}
-                              className="text-green-600 hover:text-green-800 p-1 hover:bg-green-50 rounded"
-                              title="Assign"
-                            >
-                              <UserPlus className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => rejectAppointment(apt.id)}
-                              className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded"
-                              title="Reject"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </>
+                        {(apt.status === "Pending" || apt.status === "Approved") && (
+                          <button
+                            onClick={() => {
+                              setSelectedAppointment(apt);
+                              setSelectedEmployeeIds([]);
+                              setShowAssignModal(true);
+                            }}
+                            className={`px-3 py-1.5 text-white rounded-lg font-medium text-sm transition-colors ${
+                              (apt.assignedEmployees && apt.assignedEmployees.length > 0) || apt.assignedEmployee
+                                ? "bg-orange-600 hover:bg-orange-700"
+                                : "bg-green-600 hover:bg-green-700"
+                            }`}
+                          >
+                            {(apt.assignedEmployees && apt.assignedEmployees.length > 0) || apt.assignedEmployee ? "Reassign" : "Assign"}
+                          </button>
                         )}
-                        <button
-                          className="text-gray-600 hover:text-gray-800 p-1 hover:bg-gray-50 rounded"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1844,16 +1944,22 @@ export default function AdminDashboard() {
       {showAssignModal && selectedAppointment && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowAssignModal(false)}
+          onClick={() => {
+            setShowAssignModal(false);
+            setSelectedEmployeeIds([]);
+          }}
         >
           <div 
-            className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 transform transition-all"
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 transform transition-all max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">Assign Employee</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Assign Employees</h2>
               <button
-                onClick={() => setShowAssignModal(false)}
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setSelectedEmployeeIds([]);
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -1865,51 +1971,111 @@ export default function AdminDashboard() {
               <p className="text-sm text-gray-700">{selectedAppointment.vehicle}</p>
               <p className="text-xs text-gray-500 mt-1">{selectedAppointment.serviceType} • {selectedAppointment.date} at {selectedAppointment.time}</p>
             </div>
-            <div className="space-y-2 mb-6 max-h-64 overflow-y-auto">
-              {employees.filter(emp => emp.availability === "Available").length === 0 ? (
+            <div className="space-y-2 mb-6 max-h-96 overflow-y-auto">
+              {employees.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p className="font-medium">No available employees</p>
-                  <p className="text-sm">All employees are currently busy</p>
+                  <p className="font-medium">No employees available</p>
+                  <p className="text-sm">Please add employees first</p>
                 </div>
               ) : (
-                employees
-                  .filter(emp => emp.availability === "Available")
-                  .map((emp) => (
-                    <button
+                employees.map((emp) => {
+                  const isSelected = selectedEmployeeIds.includes(emp.id);
+                  return (
+                    <div
                       key={emp.id}
-                      onClick={() => assignEmployee(selectedAppointment.id, emp.id)}
-                      className="w-full text-left p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedEmployeeIds(selectedEmployeeIds.filter(id => id !== emp.id));
+                        } else {
+                          setSelectedEmployeeIds([...selectedEmployeeIds, emp.id]);
+                        }
+                      }}
+                      className={`w-full text-left p-4 border-2 rounded-lg transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-green-500 bg-green-50"
+                          : "border-gray-200 hover:border-blue-500 hover:bg-blue-50"
+                      }`}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                          <div className="flex items-center gap-3 mb-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                               {emp.name.charAt(0)}
                             </div>
-                            <div className="font-semibold text-gray-900 group-hover:text-blue-700">{emp.name}</div>
+                            <div>
+                              <div className={`font-semibold ${isSelected ? "text-green-700" : "text-gray-900"}`}>
+                                {emp.name}
+                              </div>
+                              <div className="text-sm text-gray-600">{emp.email}</div>
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-600 ml-10">{emp.email}</div>
-                          <div className="mt-2 ml-10 flex flex-wrap gap-1">
-                            {emp.skillSet.map((skill, idx) => (
-                              <span key={idx} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
-                                {skill}
-                              </span>
-                            ))}
+                          <div className="ml-16">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-semibold text-gray-600 uppercase">Skills:</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {emp.skillSet && emp.skillSet.length > 0 ? (
+                                emp.skillSet.map((skill, idx) => (
+                                  <span 
+                                    key={idx} 
+                                    className="px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-sm font-medium border border-blue-200"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-xs text-gray-400 italic">No skills assigned</span>
+                              )}
+                            </div>
+                            <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
+                              <span>Availability: <span className={`font-medium ${
+                                emp.availability === "Available" ? "text-green-600" :
+                                emp.availability === "Busy" ? "text-red-600" : "text-gray-600"
+                              }`}>{emp.availability}</span></span>
+                              <span>Projects: <span className="font-medium">{emp.currentProjects}</span></span>
+                            </div>
                           </div>
                         </div>
-                        <CheckCircle2 className="w-5 h-5 text-gray-300 group-hover:text-blue-600" />
+                        {isSelected && (
+                          <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0" />
+                        )}
                       </div>
-                    </button>
-                  ))
+                    </div>
+                  );
+                })
               )}
             </div>
-            <button
-              onClick={() => setShowAssignModal(false)}
-              className="w-full px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
-            >
-              Cancel
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  if (selectedEmployeeIds.length === 0) {
+                    showToast("Please select at least one employee", "error");
+                    return;
+                  }
+                  assignEmployees(selectedAppointment.id, selectedEmployeeIds);
+                }}
+                className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
+              >
+                Assign {selectedEmployeeIds.length > 0 ? `(${selectedEmployeeIds.length})` : ""}
+              </button>
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setSelectedEmployeeIds([]);
+                }}
+                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1973,14 +2139,14 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Time Slot Modal */}
-      {showTimeSlotModal && (
+      {/* Unavailable Date Modal */}
+      {showUnavailableDateModal && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowTimeSlotModal(false)}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => setShowUnavailableDateModal(false)}
         >
           <div 
-            className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 transform transition-all"
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 transform transition-all my-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
@@ -1988,72 +2154,105 @@ export default function AdminDashboard() {
                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                   <Settings className="w-5 h-5 text-blue-600" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900">Adjust Time Slot</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Manage Unavailable Dates</h2>
               </div>
               <button
-                onClick={() => setShowTimeSlotModal(false)}
+                onClick={() => setShowUnavailableDateModal(false)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={timeSlotData.date}
-                  onChange={(e) => setTimeSlotData({ ...timeSlotData, date: e.target.value })}
-                  className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  min={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Time <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="time"
-                  value={timeSlotData.time}
-                  onChange={(e) => setTimeSlotData({ ...timeSlotData, time: e.target.value })}
-                  className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Action <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={timeSlotData.action}
-                  onChange={(e) => setTimeSlotData({ ...timeSlotData, action: e.target.value })}
-                  className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            
+            {/* Add New Unavailable Date */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Unavailable Date</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={unavailableDateData.date}
+                    onChange={(e) => setUnavailableDateData({ ...unavailableDateData, date: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Reason <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={unavailableDateData.reason}
+                    onChange={(e) => setUnavailableDateData({ ...unavailableDateData, reason: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="">Select reason</option>
+                    <option value="Holiday">Holiday</option>
+                    <option value="Shop Closed">Shop Closed</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Description (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={unavailableDateData.description}
+                    onChange={(e) => setUnavailableDateData({ ...unavailableDateData, description: e.target.value })}
+                    placeholder="Enter description..."
+                    className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                <button
+                  onClick={addUnavailableDate}
+                  disabled={!unavailableDateData.date || !unavailableDateData.reason}
+                  className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md transition-all"
                 >
-                  <option value="block">🔒 Block Slot</option>
-                  <option value="unblock">🔓 Unblock Slot</option>
-                  <option value="modify">✏️ Modify Slot</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {timeSlotData.action === "block" && "Prevent bookings for this time slot"}
-                  {timeSlotData.action === "unblock" && "Make this time slot available for bookings"}
-                  {timeSlotData.action === "modify" && "Change the time slot details"}
-                </p>
+                  Add Unavailable Date
+                </button>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+
+            {/* List of Unavailable Dates */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Existing Unavailable Dates</h3>
+              {unavailableDates.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No unavailable dates added yet</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {unavailableDates.map((date) => (
+                    <div key={date.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                      <div>
+                        <p className="font-medium text-gray-900">{new Date(date.date).toLocaleDateString()}</p>
+                        <p className="text-sm text-gray-600">{date.reason}</p>
+                        {date.description && (
+                          <p className="text-xs text-gray-500 mt-1">{date.description}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => removeUnavailableDate(date.id)}
+                        className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6">
               <button
-                onClick={adjustTimeSlot}
-                disabled={!timeSlotData.date || !timeSlotData.time}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md transition-all"
+                onClick={() => setShowUnavailableDateModal(false)}
+                className="w-full px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
               >
-                Confirm {timeSlotData.action === "block" ? "Block" : timeSlotData.action === "unblock" ? "Unblock" : "Modify"}
-              </button>
-              <button
-                onClick={() => setShowTimeSlotModal(false)}
-                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
-              >
-                Cancel
+                Close
               </button>
             </div>
           </div>
