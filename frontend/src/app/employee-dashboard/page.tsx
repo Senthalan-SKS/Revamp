@@ -588,11 +588,11 @@ export default function EmployeeDashboard() {
       </div>
 
       {/* Recent Tasks */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 relative z-10">
+      <div className="rounded-xl p-6 shadow-sm border border-white/30 relative z-10" style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }}>
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Tasks</h3>
         <div className="space-y-3">
           {tasks.slice(0, 3).map((task) => (
-            <div key={task.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div key={task.id} className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }}>
               <div className="flex items-center space-x-3">
                 <div className={`w-3 h-3 rounded-full ${
                   task.status === 'in-progress' ? 'bg-orange-500' :
@@ -600,8 +600,8 @@ export default function EmployeeDashboard() {
                   task.status === 'delivered' ? 'bg-purple-500' : 'bg-gray-400'
                 }`}></div>
                 <div>
-                  <p className="font-medium text-gray-800">{task.customerName}</p>
-                  <p className="text-sm text-gray-600">{task.description}</p>
+                  <p className="font-medium text-white">{task.customerName}</p>
+                  <p className="text-sm text-gray-200">{task.description}</p>
                 </div>
               </div>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
