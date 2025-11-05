@@ -418,8 +418,20 @@ export default function EmployeeDashboard() {
   );
 
   const DashboardTab = () => (
-    <div className="flex-1 p-6">
-      <div className="mb-6">
+    <div className="flex-1 p-6 relative">
+      {/* Background Image with overlay */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-fixed bg-no-repeat"
+        style={{ 
+          backgroundImage: 'url(/Bg.jpg)',
+          opacity: 0.7
+        }}
+      ></div>
+      
+      {/* Light overlay for better readability */}
+      <div className="absolute inset-0 bg-white/40"></div>
+      
+      <div className="relative z-10 mb-6">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
           {greeting}, {user?.username || 'Employee'}!
         </h1>
@@ -427,7 +439,7 @@ export default function EmployeeDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 relative z-10">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-3 bg-blue-100 rounded-lg">
@@ -473,7 +485,7 @@ export default function EmployeeDashboard() {
 
       {/* Current Task */}
       {currentTimeLog && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6 relative z-10">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-800">Currently Working On</h3>
             <div className="flex items-center space-x-2">
@@ -522,7 +534,7 @@ export default function EmployeeDashboard() {
       )}
 
       {/* Workflow Status */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6 relative z-10">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Workflow Status</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
@@ -561,7 +573,7 @@ export default function EmployeeDashboard() {
       </div>
 
       {/* Recent Tasks */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 relative z-10">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Tasks</h3>
         <div className="space-y-3">
           {tasks.slice(0, 3).map((task) => (
