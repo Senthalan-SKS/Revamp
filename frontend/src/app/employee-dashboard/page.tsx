@@ -361,7 +361,7 @@ export default function EmployeeDashboard() {
   };
 
   const Sidebar = () => (
-    <div className="w-64 bg-[#000042] shadow-lg rounded-l-2xl p-6">
+    <div className="w-64 bg-[#000042] shadow-lg rounded-l-2xl p-6 fixed left-0 top-0 h-screen overflow-y-auto">
       <div className="flex items-center mb-8">
         <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
           {user?.username?.charAt(0) || 'E'}
@@ -880,7 +880,7 @@ export default function EmployeeDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col ml-64">
         <div className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
