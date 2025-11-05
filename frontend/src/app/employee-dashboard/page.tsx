@@ -600,13 +600,25 @@ export default function EmployeeDashboard() {
   );
 
   const TasksTab = () => (
-    <div className="flex-1 p-6">
-      <div className="mb-6">
+    <div className="flex-1 p-6 relative">
+      {/* Background Image with overlay */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-fixed bg-no-repeat"
+        style={{ 
+          backgroundImage: 'url(/Bg.jpg)',
+          opacity: 0.7
+        }}
+      ></div>
+      
+      {/* Light overlay for better readability */}
+      <div className="absolute inset-0 bg-white/40"></div>
+      
+      <div className="relative z-10 mb-6">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">My Tasks</h1>
         <p className="text-gray-600">Manage your assigned tasks and track progress</p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 relative z-10">
         {tasks.map((task) => (
           <motion.div
             key={task.id}
