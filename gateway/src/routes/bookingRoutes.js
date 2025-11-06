@@ -22,6 +22,11 @@ router.use("/bookings", async (req, res) => {
 			},
 		};
 
+		// Forward Authorization header if present
+		if (req.headers["authorization"]) {
+			fetchOptions.headers["Authorization"] = req.headers["authorization"];
+		}
+
 		// Only add body for methods that support it
 		if (req.method !== "GET" && req.method !== "DELETE" && req.body) {
 			fetchOptions.body = JSON.stringify(req.body);
