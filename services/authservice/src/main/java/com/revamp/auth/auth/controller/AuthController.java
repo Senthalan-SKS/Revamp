@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -94,26 +93,26 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
         try {
+            // 🔹 Fetch the user by email
             User user = authService.getUserByEmail(req.email);
+
+            // 🔹 Authenticate and generate JWT token
             String token = authService.login(req.email, req.password);
 
-            user.setPasswordHash(null); // don’t leak hash
+            // 🔹 Prevent password hash from being returned in response
+            user.setPasswordHash(null);
+
+            // 🔹 Return success with token and user role
             return ResponseEntity.ok(new AuthResponse(
                     token,
                     Collections.singletonMap("role", user.getRole())));
+
         } catch (RuntimeException ex) {
+            // 🔹 Handle invalid credentials or authentication failures
             return ResponseEntity.status(401)
                     .body(Collections.singletonMap("message", ex.getMessage()));
         }
-    }user.setPasswordHash(null); // don't leak hash
-    return ResponseEntity.ok(new AuthResponse(token,Collections.singletonMap("role",user.getRole())));}catch(
-
-    RuntimeException ex)
-    {
-        return ResponseEntity.status(401)
-                .body(Collections.singletonMap("message", ex.getMessage()));
     }
-}
 
     // Admin endpoint to register employees
     @PostMapping("/register-employee")
