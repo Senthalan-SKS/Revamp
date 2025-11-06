@@ -55,8 +55,11 @@ public class BookingController {
 	public ResponseEntity<List<Appointment>> getAllAppointments() {
 		try {
 			List<Appointment> appointments = bookingService.getAllAppointments();
+			System.out.println("DEBUG: Controller returning " + appointments.size() + " appointment(s)");
 			return ResponseEntity.ok(appointments);
 		} catch (Exception e) {
+			System.err.println("ERROR: Failed to get appointments: " + e.getMessage());
+			e.printStackTrace();
 			return ResponseEntity.badRequest().build();
 		}
 	}

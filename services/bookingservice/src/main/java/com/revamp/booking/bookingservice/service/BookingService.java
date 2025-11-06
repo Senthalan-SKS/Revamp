@@ -85,7 +85,12 @@ public class BookingService {
 	 * Get all appointments
 	 */
 	public List<Appointment> getAllAppointments() {
-		return mongoTemplate.findAll(Appointment.class);
+		List<Appointment> appointments = mongoTemplate.findAll(Appointment.class);
+		System.out.println("DEBUG: Found " + appointments.size() + " appointment(s) in database");
+		for (Appointment apt : appointments) {
+			System.out.println("DEBUG: Appointment ID: " + apt.getId() + ", Customer: " + apt.getCustomerName() + ", Date: " + apt.getDate());
+		}
+		return appointments;
 	}
 
 	/**

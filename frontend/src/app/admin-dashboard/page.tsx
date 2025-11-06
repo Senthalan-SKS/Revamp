@@ -41,6 +41,7 @@ type Appointment = {
   status: "Pending" | "Approved" | "In Progress" | "Completed" | "Delivered";
   assignedEmployee?: string;
   assignedEmployees?: string[];
+  assignedEmployeeIds?: string[]; // Employee IDs from API
   modifications?: string[];
   customerEmail?: string;
   estimatedCost?: number;
@@ -228,6 +229,7 @@ export default function AdminDashboard() {
             ? apt.assignedEmployeeNames[0] 
             : apt.assignedEmployee,
           assignedEmployees: apt.assignedEmployeeNames || (apt.assignedEmployee ? [apt.assignedEmployee] : []),
+          assignedEmployeeIds: apt.assignedEmployeeIds || undefined, // Include employee IDs from API
           modifications: apt.modifications || [],
           customerEmail: apt.customerEmail || "",
           estimatedCost: apt.estimatedCost || undefined
@@ -1128,7 +1130,27 @@ export default function AdminDashboard() {
                           <button
                             onClick={() => {
                               setSelectedAppointment(apt);
-                              setSelectedEmployeeIds([]);
+                              
+                              // Pre-select previously assigned employees
+                              let preSelectedIds: string[] = [];
+                              
+                              // First, try to get IDs from the appointment data if available
+                              if (apt.assignedEmployeeIds && Array.isArray(apt.assignedEmployeeIds) && apt.assignedEmployeeIds.length > 0) {
+                                preSelectedIds = apt.assignedEmployeeIds;
+                              } else if (apt.assignedEmployees && apt.assignedEmployees.length > 0) {
+                                // If no IDs, match employee names to get IDs
+                                preSelectedIds = employees
+                                  .filter(emp => apt.assignedEmployees?.includes(emp.name))
+                                  .map(emp => emp.id);
+                              } else if (apt.assignedEmployee) {
+                                // Single assigned employee
+                                const foundEmployee = employees.find(emp => emp.name === apt.assignedEmployee);
+                                if (foundEmployee) {
+                                  preSelectedIds = [foundEmployee.id];
+                                }
+                              }
+                              
+                              setSelectedEmployeeIds(preSelectedIds);
                               setShowAssignModal(true);
                             }}
                             className={`px-3 py-1.5 text-white rounded-lg font-medium text-sm transition-colors ${
