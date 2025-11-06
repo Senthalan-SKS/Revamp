@@ -28,7 +28,8 @@ import {
   Eye,
   Download,
   AlertCircle,
-  UserPlus
+  UserPlus,
+  Wrench
 } from "lucide-react";
 
 type Appointment = {
@@ -91,9 +92,17 @@ type Toast = {
 
 const AVAILABLE_SKILLS = ["Engine", "Electronics", "Bodywork", "Interior", "Painting", "Detailing", "Transmission", "Performance", "Audio", "Exhaust"];
 
+type ModificationService = {
+  id: string;
+  name: string;
+  description?: string;
+  estimatedCost?: number;
+  estimatedHours?: number;
+};
+
 export default function AdminDashboard() {
   const [user, setUser] = useState<TokenPayload | null>(null);
-  const [activeView, setActiveView] = useState<"dashboard" | "appointments" | "employees" | "analytics" | "profile" | "employee-logs">("dashboard");
+  const [activeView, setActiveView] = useState<"dashboard" | "appointments" | "employees" | "analytics" | "profile" | "employee-logs" | "modification-services">("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
@@ -106,6 +115,14 @@ export default function AdminDashboard() {
   const [unavailableDateData, setUnavailableDateData] = useState({ date: "", reason: "", description: "" });
   const [unavailableDates, setUnavailableDates] = useState<Array<{id: string, date: string, reason: string, description?: string}>>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [modificationServices, setModificationServices] = useState<ModificationService[]>([]);
+  const [showModificationServiceModal, setShowModificationServiceModal] = useState(false);
+  const [modificationServiceForm, setModificationServiceForm] = useState({
+    name: "",
+    description: "",
+    estimatedCost: "",
+    estimatedHours: ""
+  });
   
   // Search and filter states
   const [appointmentSearch, setAppointmentSearch] = useState("");
@@ -398,6 +415,12 @@ export default function AdminDashboard() {
     loadEmployees();
     loadAppointments();
   }, []);
+
+  useEffect(() => {
+    if (activeView === "modification-services") {
+      loadModificationServices();
+    }
+  }, [activeView]);
 
   const greeting = getGreeting();
 
@@ -812,6 +835,85 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadModificationServices = async () => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const response = await fetch(`${GATEWAY_URL}/api/admin/modification-services`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        const services = await response.json();
+        setModificationServices(services);
+      }
+    } catch (error) {
+      console.error("Error loading modification services:", error);
+    }
+  };
+
+  const addModificationService = async () => {
+    if (!modificationServiceForm.name.trim()) {
+      showToast("Please enter a service name", "error");
+      return;
+    }
+    
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const requestBody: any = {
+        name: modificationServiceForm.name,
+        description: modificationServiceForm.description || "",
+      };
+      
+      if (modificationServiceForm.estimatedCost) {
+        requestBody.estimatedCost = parseFloat(modificationServiceForm.estimatedCost);
+      }
+      if (modificationServiceForm.estimatedHours) {
+        requestBody.estimatedHours = parseInt(modificationServiceForm.estimatedHours);
+      }
+      
+      const response = await fetch(`${GATEWAY_URL}/api/admin/modification-services`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      
+      if (response.ok) {
+        showToast("Modification service added successfully!", "success");
+        setModificationServiceForm({ name: "", description: "", estimatedCost: "", estimatedHours: "" });
+        setShowModificationServiceModal(false);
+        loadModificationServices();
+      } else {
+        showToast("Failed to add modification service", "error");
+      }
+    } catch (error) {
+      showToast("Error adding modification service", "error");
+    }
+  };
+
+  const removeModificationService = async (id: string) => {
+    if (!confirm("Are you sure you want to remove this modification service?")) {
+      return;
+    }
+    
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const response = await fetch(`${GATEWAY_URL}/api/admin/modification-services/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        showToast("Modification service removed successfully!", "success");
+        loadModificationServices();
+      } else {
+        showToast("Failed to remove modification service", "error");
+      }
+    } catch (error) {
+      showToast("Error removing modification service", "error");
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Pending": return "bg-yellow-100 text-yellow-800 border-yellow-200";
@@ -857,6 +959,7 @@ export default function AdminDashboard() {
     { id: "employees", label: "Employees", icon: Users },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "employee-logs", label: "Employee Logs", icon: FileText },
+    { id: "modification-services", label: "Modification Services", icon: Wrench },
     { id: "profile", label: "Profile", icon: UserCircle },
   ];
 
@@ -1647,6 +1750,83 @@ export default function AdminDashboard() {
     );
   };
 
+  // Modification Services View
+  const renderModificationServices = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Modification Services</h1>
+            <p className="text-gray-500 mt-1">Manage modification services available to customers</p>
+          </div>
+          <button
+            onClick={() => {
+              setModificationServiceForm({ name: "", description: "", estimatedCost: "", estimatedHours: "" });
+              setShowModificationServiceModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 shadow-md transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Add Service
+          </button>
+        </div>
+
+        {/* Services List */}
+        <div className="bg-white rounded-xl shadow-lg border">
+          <div className="p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Available Services</h2>
+            {modificationServices.length === 0 ? (
+              <div className="text-center py-12">
+                <Wrench className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">No modification services added yet</p>
+                <p className="text-gray-400 text-sm mt-2">Click "Add Service" to create your first service</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {modificationServices.map((service) => (
+                  <div
+                    key={service.id}
+                    className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 text-lg">{service.name}</h3>
+                        {service.description && (
+                          <p className="text-sm text-gray-600 mt-1">{service.description}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => removeModificationService(service.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Remove service"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex gap-4 text-sm text-gray-600 mt-3">
+                      {service.estimatedCost && (
+                        <div className="flex items-center gap-1">
+                          <DollarSign className="w-4 h-4" />
+                          <span>${service.estimatedCost}</span>
+                        </div>
+                      )}
+                      {service.estimatedHours && (
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          <span>{service.estimatedHours} hrs</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Profile View
   const renderProfile = () => {
     const handleSaveProfile = () => {
@@ -1931,6 +2111,7 @@ export default function AdminDashboard() {
           {activeView === "employees" && renderEmployees()}
           {activeView === "analytics" && renderAnalytics()}
           {activeView === "employee-logs" && renderEmployeeLogs()}
+          {activeView === "modification-services" && renderModificationServices()}
           {activeView === "profile" && renderProfile()}
         </div>
       </div>
@@ -2275,6 +2456,105 @@ export default function AdminDashboard() {
                 className="w-full px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Modification Service Modal */}
+      {showModificationServiceModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => setShowModificationServiceModal(false)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 transform transition-all my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Wrench className="w-5 h-5 text-blue-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Add Modification Service</h2>
+              </div>
+              <button
+                onClick={() => setShowModificationServiceModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Service Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={modificationServiceForm.name}
+                  onChange={(e) => setModificationServiceForm({ ...modificationServiceForm, name: e.target.value })}
+                  className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., Engine Upgrade, Body Kit, Audio System"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={modificationServiceForm.description}
+                  onChange={(e) => setModificationServiceForm({ ...modificationServiceForm, description: e.target.value })}
+                  className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="Optional description of the service"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Estimated Cost ($)
+                  </label>
+                  <input
+                    type="number"
+                    value={modificationServiceForm.estimatedCost}
+                    onChange={(e) => setModificationServiceForm({ ...modificationServiceForm, estimatedCost: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Optional"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Estimated Hours
+                  </label>
+                  <input
+                    type="number"
+                    value={modificationServiceForm.estimatedHours}
+                    onChange={(e) => setModificationServiceForm({ ...modificationServiceForm, estimatedHours: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Optional"
+                    min="0"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowModificationServiceModal(false)}
+                className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addModificationService}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 font-medium transition-all shadow-md"
+              >
+                Add Service
               </button>
             </div>
           </div>
