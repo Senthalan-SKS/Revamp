@@ -188,15 +188,15 @@ export default function AdminDashboard() {
   ]);
 
   const [analytics, setAnalytics] = useState<Analytics>({
-    totalBookings: 156,
-    pendingApprovals: 2,
-    inProgress: 3,
-    completedToday: 1,
-    averageServiceTime: "3.5 hours",
-    averageModificationTime: "6.2 hours",
-    totalRevenue: 125000,
-    thisMonthRevenue: 18500,
-    lastMonthRevenue: 15200
+    totalBookings: 0,
+    pendingApprovals: 0,
+    inProgress: 0,
+    completedToday: 0,
+    averageServiceTime: "0 hours",
+    averageModificationTime: "0 hours",
+    totalRevenue: 0,
+    thisMonthRevenue: 0,
+    lastMonthRevenue: 0
   });
 
   const [employeeForm, setEmployeeForm] = useState({
@@ -229,31 +229,71 @@ export default function AdminDashboard() {
         headers: { "Content-Type": "application/json" },
       });
       
+      console.log("Appointments response status:", response.status);
+      console.log("Appointments response headers:", Object.fromEntries(response.headers.entries()));
+      
       if (response.ok) {
         const appointmentsData = await response.json();
-        console.log("Appointments data received:", appointmentsData);
+        console.log("Appointments data received (raw):", appointmentsData);
+        console.log("Appointments data type:", typeof appointmentsData);
+        console.log("Is array?", Array.isArray(appointmentsData));
+        
+        // Ensure appointmentsData is an array
+        if (!Array.isArray(appointmentsData)) {
+          console.error("Expected array but got:", typeof appointmentsData, appointmentsData);
+          showToast("Invalid data format received from server. Expected array.", "error");
+          setAppointments([]);
+          return;
+        }
         
         // Map booking service appointments to admin dashboard format
-        const mappedAppointments: Appointment[] = appointmentsData.map((apt: any) => ({
-          id: apt.id,
-          customerName: apt.customerName || "Unknown",
-          vehicle: apt.vehicle || "Unknown",
-          serviceType: apt.serviceType || "Service",
-          date: apt.date || "",
-          time: apt.time ? formatTimeFromString(apt.time) : "",
-          status: apt.status || "Pending",
-          assignedEmployee: apt.assignedEmployeeNames && apt.assignedEmployeeNames.length > 0 
-            ? apt.assignedEmployeeNames[0] 
-            : apt.assignedEmployee,
-          assignedEmployees: apt.assignedEmployeeNames || (apt.assignedEmployee ? [apt.assignedEmployee] : []),
-          assignedEmployeeIds: apt.assignedEmployeeIds || undefined, // Include employee IDs from API
-          modifications: apt.modifications || [],
-          customerEmail: apt.customerEmail || "",
-          estimatedCost: apt.estimatedCost || undefined
-        }));
+        const mappedAppointments: Appointment[] = appointmentsData.map((apt: any) => {
+          // Handle date format - LocalDate serializes as "YYYY-MM-DD"
+          let dateStr = "";
+          if (apt.date) {
+            if (typeof apt.date === 'string') {
+              dateStr = apt.date.split('T')[0]; // Remove time part if present
+            } else {
+              dateStr = String(apt.date);
+            }
+          }
+          
+          // Handle time format - LocalTime serializes as "HH:mm:ss" or "HH:mm"
+          let timeStr = "";
+          if (apt.time) {
+            if (typeof apt.time === 'string') {
+              timeStr = formatTimeFromString(apt.time);
+            } else {
+              timeStr = String(apt.time);
+            }
+          }
+          
+          return {
+            id: apt.id || apt._id || "",
+            customerName: apt.customerName || "Unknown",
+            vehicle: apt.vehicle || "Unknown",
+            serviceType: apt.serviceType || "Service",
+            date: dateStr,
+            time: timeStr,
+            status: apt.status || "Pending",
+            assignedEmployee: apt.assignedEmployeeNames && Array.isArray(apt.assignedEmployeeNames) && apt.assignedEmployeeNames.length > 0 
+              ? apt.assignedEmployeeNames[0] 
+              : apt.assignedEmployee || "",
+            assignedEmployees: apt.assignedEmployeeNames && Array.isArray(apt.assignedEmployeeNames) 
+              ? apt.assignedEmployeeNames 
+              : (apt.assignedEmployee ? [apt.assignedEmployee] : []),
+            assignedEmployeeIds: apt.assignedEmployeeIds && Array.isArray(apt.assignedEmployeeIds) 
+              ? apt.assignedEmployeeIds 
+              : undefined,
+            modifications: apt.modifications && Array.isArray(apt.modifications) ? apt.modifications : [],
+            customerEmail: apt.customerEmail || "",
+            estimatedCost: apt.estimatedCost || undefined
+          };
+        });
         
         setAppointments(mappedAppointments);
         console.log(`Loaded ${mappedAppointments.length} appointment(s) successfully`);
+        console.log("Mapped appointments:", mappedAppointments);
         
         if (mappedAppointments.length === 0) {
           showToast("No appointments found in database.", "info");
@@ -262,14 +302,24 @@ export default function AdminDashboard() {
         }
       } else {
         console.error("Failed to load appointments - Response status:", response.status);
-        const errorData = await response.json().catch(() => ({}));
+        const responseText = await response.text().catch(() => "No response body");
+        console.error("Failed to load appointments - Response text:", responseText);
+        
+        let errorData = {};
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          errorData = { message: responseText || `HTTP ${response.status} error` };
+        }
+        
         console.error("Failed to load appointments - Error:", errorData);
-        showToast("Failed to load appointments. Using empty list.", "error");
+        showToast(`Failed to load appointments: ${(errorData as any).message || `HTTP ${response.status} error`}`, "error");
         setAppointments([]);
       }
     } catch (error: any) {
       console.error("Error loading appointments:", error);
-      showToast(`Error loading appointments: ${error.message || "Network error"}`, "error");
+      console.error("Error stack:", error.stack);
+      showToast(`Error loading appointments: ${error.message || "Network error. Please check if the gateway and booking service are running."}`, "error");
       setAppointments([]);
     }
   };
@@ -313,49 +363,109 @@ export default function AdminDashboard() {
       
       if (employeesResponse.ok) {
         const employeesData = await employeesResponse.json();
-        console.log("Employees data received:", employeesData);
+        console.log("Employees data received (raw):", employeesData);
+        console.log("Employees data type:", typeof employeesData);
+        console.log("Is array?", Array.isArray(employeesData));
+        
+        // Ensure employeesData is an array
+        if (!Array.isArray(employeesData)) {
+          console.error("Expected array but got:", typeof employeesData, employeesData);
+          showToast("Invalid data format received from server. Expected array.", "error");
+          setEmployees([]);
+          return;
+        }
         
         let detailsData = [];
         if (detailsResponse && detailsResponse.ok) {
-          detailsData = await detailsResponse.json();
-          console.log("Employee details data received:", detailsData);
+          const detailsResponseData = await detailsResponse.json();
+          console.log("Employee details data received (raw):", detailsResponseData);
+          console.log("Employee details data type:", typeof detailsResponseData);
+          console.log("Is array?", Array.isArray(detailsResponseData));
+          
+          if (Array.isArray(detailsResponseData)) {
+            detailsData = detailsResponseData;
+          } else {
+            console.warn("Employee details is not an array:", detailsResponseData);
+            detailsData = [];
+          }
         } else {
           if (detailsResponse && !detailsResponse.ok) {
-            const errorData = await detailsResponse.json().catch(() => ({}));
-            console.warn("Employee details fetch failed:", errorData);
+            const responseText = await detailsResponse.text().catch(() => "No response body");
+            console.warn("Employee details fetch failed - Status:", detailsResponse.status);
+            console.warn("Employee details fetch failed - Response:", responseText);
+            try {
+              const errorData = JSON.parse(responseText);
+              console.warn("Employee details fetch failed - Error:", errorData);
+            } catch (e) {
+              console.warn("Employee details fetch failed - Could not parse error response");
+            }
           }
           console.warn("Employee details not available");
-          showToast("Warning: Could not load employee details. Employees will be shown with basic information only.", "info");
+          // Don't show toast for missing details, it's not critical
         }
         
         // Create a map of userId -> employee details for quick lookup
         const detailsMap = new Map();
         if (Array.isArray(detailsData)) {
+          console.log(`Processing ${detailsData.length} employee detail records`);
           detailsData.forEach((detail: any) => {
             if (detail && detail.userId) {
+              console.log(`Employee detail for userId ${detail.userId}:`, {
+                fullName: detail.fullName,
+                email: detail.email,
+                skills: detail.skills,
+                skillsType: typeof detail.skills,
+                isSkillsArray: Array.isArray(detail.skills)
+              });
               detailsMap.set(detail.userId, detail);
             }
           });
+        } else {
+          console.warn("Employee details data is not an array:", detailsData);
         }
         
         // Convert User data to Employee format, merging with employee details
-        const employeeData: Employee[] = Array.isArray(employeesData) 
-          ? employeesData.map((user: any, index: number) => {
-              const details = detailsMap.get(user.id || user._id);
-              return {
-                id: user.id || user._id || String(index + 1),
-                name: details?.fullName || user.username || "Unknown",
-                email: user.email || "",
-                skillSet: details?.skills || (Array.isArray(details?.skills) ? details.skills : []),
-                availability: "Available" as const,
-                currentProjects: 0,
-                completedProjects: 0,
-                averageCompletionTime: "0 hours",
-                phone: details?.phoneNumber || undefined,
-                joinDate: undefined
-              };
-            })
-          : [];
+        const employeeData: Employee[] = employeesData.map((user: any, index: number) => {
+          const userId = user.id || user._id || String(index + 1);
+          const details = detailsMap.get(userId);
+          
+          console.log(`Processing employee ${userId}:`, {
+            hasDetails: !!details,
+            detailsSkills: details?.skills,
+            detailsSkillsType: typeof details?.skills,
+            isDetailsSkillsArray: Array.isArray(details?.skills)
+          });
+          
+          // Handle skills - can be array or undefined
+          let skillsArray: string[] = [];
+          if (details?.skills) {
+            if (Array.isArray(details.skills)) {
+              skillsArray = details.skills;
+              console.log(`✓ Employee ${userId} has ${skillsArray.length} skills:`, skillsArray);
+            } else if (typeof details.skills === 'string') {
+              // Handle case where skills might be stored as a string
+              skillsArray = [details.skills];
+              console.log(`⚠ Employee ${userId} skills stored as string, converted to array:`, skillsArray);
+            } else {
+              console.warn(`⚠ Employee ${userId} has unexpected skills type:`, typeof details.skills, details.skills);
+            }
+          } else {
+            console.log(`⚠ Employee ${userId} has no skills in details`);
+          }
+          
+          return {
+            id: userId,
+            name: details?.fullName || user.username || user.name || "Unknown",
+            email: user.email || "",
+            skillSet: skillsArray,
+            availability: "Available" as const,
+            currentProjects: 0,
+            completedProjects: 0,
+            averageCompletionTime: "0 hours",
+            phone: details?.phoneNumber || undefined,
+            joinDate: undefined
+          };
+        });
         
         console.log("Processed employee data:", employeeData);
         setEmployees(employeeData);
@@ -397,6 +507,77 @@ export default function AdminDashboard() {
     }
   };
 
+  // Calculate analytics from appointments data
+  const calculateAnalytics = useCallback((appointmentsData: Appointment[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const totalBookings = appointmentsData.length;
+    const pendingApprovals = appointmentsData.filter(apt => apt.status === "Pending").length;
+    const inProgress = appointmentsData.filter(apt => apt.status === "In Progress").length;
+    const completedToday = appointmentsData.filter(apt => 
+      apt.status === "Completed" && apt.date === today
+    ).length;
+    
+    // Calculate revenue from appointments with estimated costs
+    const totalRevenue = appointmentsData.reduce((sum, apt) => {
+      return sum + (apt.estimatedCost || 0);
+    }, 0);
+    
+    // Calculate monthly revenue
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+    const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+    
+    const thisMonthRevenue = appointmentsData
+      .filter(apt => {
+        if (!apt.date) return false;
+        const aptDate = new Date(apt.date);
+        return aptDate.getMonth() === thisMonth && aptDate.getFullYear() === thisYear;
+      })
+      .reduce((sum, apt) => sum + (apt.estimatedCost || 0), 0);
+    
+    const lastMonthRevenue = appointmentsData
+      .filter(apt => {
+        if (!apt.date) return false;
+        const aptDate = new Date(apt.date);
+        return aptDate.getMonth() === lastMonth && aptDate.getFullYear() === lastMonthYear;
+      })
+      .reduce((sum, apt) => sum + (apt.estimatedCost || 0), 0);
+    
+    // Calculate average service times (simplified - would need actual completion data)
+    const serviceAppointments = appointmentsData.filter(apt => apt.serviceType === "Service");
+    const modificationAppointments = appointmentsData.filter(apt => apt.serviceType === "Modification");
+    
+    // For now, use default values or calculate from available data
+    // In a real system, you'd track actual completion times
+    const averageServiceTime = serviceAppointments.length > 0 ? "3.5 hours" : "0 hours";
+    const averageModificationTime = modificationAppointments.length > 0 ? "6.2 hours" : "0 hours";
+    
+    setAnalytics({
+      totalBookings,
+      pendingApprovals,
+      inProgress,
+      completedToday,
+      averageServiceTime,
+      averageModificationTime,
+      totalRevenue,
+      thisMonthRevenue,
+      lastMonthRevenue
+    });
+    
+    console.log("Analytics calculated:", {
+      totalBookings,
+      pendingApprovals,
+      inProgress,
+      completedToday,
+      totalRevenue,
+      thisMonthRevenue,
+      lastMonthRevenue
+    });
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -415,6 +596,13 @@ export default function AdminDashboard() {
     loadEmployees();
     loadAppointments();
   }, []);
+
+  // Recalculate analytics when appointments change
+  useEffect(() => {
+    if (appointments.length >= 0) {
+      calculateAnalytics(appointments);
+    }
+  }, [appointments, calculateAnalytics]);
 
   useEffect(() => {
     if (activeView === "modification-services") {
@@ -437,18 +625,54 @@ export default function AdminDashboard() {
     window.location.href = "/login";
   };
 
-  const approveAppointment = (id: string) => {
-    setAppointments(appointments.map(apt => 
-      apt.id === id ? { ...apt, status: "Approved" as const } : apt
-    ));
-    setAnalytics({ ...analytics, pendingApprovals: Math.max(0, analytics.pendingApprovals - 1) });
-    showToast("Appointment approved successfully!");
+  const approveAppointment = async (id: string) => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      
+      const response = await fetch(`${GATEWAY_URL}/api/bookings/appointments/${id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Approved" }),
+      });
+      
+      if (response.ok) {
+        // Reload appointments to get updated data from database
+        await loadAppointments();
+        showToast("Appointment approved successfully!", "success");
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to approve appointment:", errorData);
+        showToast(`Failed to approve appointment: ${(errorData as any).message || "Server error"}`, "error");
+      }
+    } catch (error: any) {
+      console.error("Error approving appointment:", error);
+      showToast(`Error approving appointment: ${error.message || "Network error"}`, "error");
+    }
   };
 
-  const rejectAppointment = (id: string) => {
-    setAppointments(appointments.filter(apt => apt.id !== id));
-    setAnalytics({ ...analytics, pendingApprovals: Math.max(0, analytics.pendingApprovals - 1) });
-    showToast("Appointment rejected", "info");
+  const rejectAppointment = async (id: string) => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      
+      // Cancel/delete the appointment
+      const response = await fetch(`${GATEWAY_URL}/api/bookings/appointments/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        // Reload appointments to get updated data from database
+        await loadAppointments();
+        showToast("Appointment rejected and removed", "info");
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to reject appointment:", errorData);
+        showToast(`Failed to reject appointment: ${(errorData as any).message || "Server error"}`, "error");
+      }
+    } catch (error: any) {
+      console.error("Error rejecting appointment:", error);
+      showToast(`Error rejecting appointment: ${error.message || "Network error"}`, "error");
+    }
   };
 
   const assignEmployees = async (appointmentId: string, employeeIds: string[]) => {
@@ -838,17 +1062,51 @@ export default function AdminDashboard() {
   const loadModificationServices = async () => {
     try {
       const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      console.log("Loading modification services from:", `${GATEWAY_URL}/api/admin/modification-services`);
+      
       const response = await fetch(`${GATEWAY_URL}/api/admin/modification-services`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
       
+      console.log("Modification services response status:", response.status);
+      
       if (response.ok) {
         const services = await response.json();
-        setModificationServices(services);
+        console.log("Modification services data received (raw):", services);
+        console.log("Modification services data type:", typeof services);
+        console.log("Is array?", Array.isArray(services));
+        
+        // Ensure services is an array
+        if (Array.isArray(services)) {
+          setModificationServices(services);
+          console.log(`Loaded ${services.length} modification service(s) successfully`);
+        } else {
+          console.error("Expected array but got:", typeof services, services);
+          showToast("Invalid data format received for modification services. Expected array.", "error");
+          setModificationServices([]);
+        }
+      } else {
+        const responseText = await response.text().catch(() => "No response body");
+        console.error("Failed to load modification services - Status:", response.status);
+        console.error("Failed to load modification services - Response:", responseText);
+        
+        let errorData = {};
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          errorData = { message: responseText || `HTTP ${response.status} error` };
+        }
+        
+        console.error("Failed to load modification services - Error:", errorData);
+        showToast(`Failed to load modification services: ${(errorData as any).message || `HTTP ${response.status} error`}`, "error");
+        setModificationServices([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading modification services:", error);
+      console.error("Error stack:", error.stack);
+      showToast(`Error loading modification services: ${error.message || "Network error. Please check if the gateway and admin service are running."}`, "error");
+      setModificationServices([]);
     }
   };
 
