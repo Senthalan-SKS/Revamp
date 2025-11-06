@@ -2,32 +2,36 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
+import ConfirmationPopup from "./ConfirmationPopup";
 
 // Theme palette (matches your dashboard)
 export const PALETTE = {
-  ink: "#0A0A0B",     // primary text
-  cyan: "#00F9FF",    // accent
-  mint: "#3DDC97",    // success
-  red:  "#E63946",    // danger
-  sky:  "#4CC9F0",    // info
-  blue: "#3E92CC",    // secondary
+  ink: "#0A0A0B", // primary text
+  cyan: "#00F9FF", // accent
+  mint: "#3DDC97", // success
+  red: "#E63946", // danger
+  sky: "#4CC9F0", // info
+  blue: "#3E92CC", // secondary
   // soft tints
   softBlue: "#F1F9FF",
   softMint: "#F2FCF8",
   softRing: "#E9EEF5",
 };
 
-type Item = { href: string; label: string; emoji: string };
+type Item = { href: string; label: string };
 
 const items: Item[] = [
-  { href: "/consumer-dashboard", label: "Home",        emoji: "🏠" },
-  { href: "/customer-history",   label: "History",     emoji: "🕘" },
-  { href: "/customer-profile",   label: "My Profile",  emoji: "👤" },
-  { href: "/customer-vehicles",  label: "My Vehicles", emoji: "🚗" },
+  { href: "/consumer-dashboard", label: "Home" },
+  { href: "/customer-bookings", label: "My Bookings" },
+  { href: "/customer-vehicles", label: "My Vehicles" },
+  { href: "/customer-history", label: "History" },
+  { href: "/customer-profile", label: "My Profile" },
 ];
 
 export default function CustomerSidebar() {
   const pathname = usePathname();
+  const [isPopupOpen, setPopupOpen] = useState(false);
 
   return (
     <aside
@@ -44,12 +48,6 @@ export default function CustomerSidebar() {
           WebkitBackdropFilter: "blur(6px)",
         }}
       >
-        <span
-          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/20 text-white"
-          aria-hidden
-        >
-          ✨
-        </span>
         Revamp • Customer
       </div>
 
@@ -65,9 +63,7 @@ export default function CustomerSidebar() {
               className={[
                 "group relative flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium",
                 "transition-all duration-300 ease-out will-change-transform",
-                active
-                  ? "text-white"
-                  : "text-gray-700 hover:text-gray-900",
+                active ? "text-white" : "text-gray-700 hover:text-gray-900",
               ].join(" ")}
               style={
                 active
@@ -92,10 +88,10 @@ export default function CustomerSidebar() {
               {/* Accent bar for active link */}
               <span
                 className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-full"
-                style={{ background: active ? "rgba(255,255,255,.9)" : "transparent" }}
+                style={{
+                  background: active ? "rgba(255,255,255,.9)" : "transparent",
+                }}
               />
-
-              <span className="text-base">{it.emoji}</span>
               <span className="truncate">{it.label}</span>
 
               {/* Hover glass sheen */}
@@ -111,24 +107,33 @@ export default function CustomerSidebar() {
         })}
       </nav>
 
-      {/* Support card */}
-      <div className="mt-auto p-4">
-        <div
-          className="rounded-xl px-4 py-3 text-xs text-gray-700 flex items-center gap-2"
-          style={{
-            background: "rgba(242,252,248,.9)", // softMint with transparency
-            border: "1px solid " + PALETTE.softRing,
-            backdropFilter: "blur(6px)",
-            WebkitBackdropFilter: "blur(6px)",
-          }}
-        >
-          <span className="text-base" aria-hidden>
-            💬
-          </span>
-          Need help?{" "}
-          <span className="font-semibold truncate">support@revamp.com</span>
-        </div>
-      </div>
+      {/* Logout button */}
+      <button
+        onClick={() => setPopupOpen(true)}
+        className="mt-auto mb-4 px-4 py-2 bg-red-500 text-white rounded-lg"
+      >
+        Logout
+      </button>
+
+      <ConfirmationPopup
+        isOpen={isPopupOpen}
+        onClose={() => setPopupOpen(false)}
+        title="Confirm Logout"
+        message="Are you sure you want to log out of your account?"
+        confirmButtonText="Yes, log out"
+        onConfirm={() => {
+          // End session (clear client-side tokens/storage) and redirect to login page
+          try {
+            localStorage.removeItem("token");
+            // clear any other client-side session storage if used
+            sessionStorage.clear();
+          } catch (e) {
+            // ignore if storage is unavailable
+          }
+          setPopupOpen(false);
+          window.location.href = "/login";
+        }}
+      />
 
       <div className="h-4" />
     </aside>

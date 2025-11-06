@@ -13,8 +13,10 @@ public class Customer {
   @Id
   private String id;
 
-  private String userId;   // JWT subject
+  private String userId; // JWT subject
   private String name;
   private String email;
   private String phone;
+  private String address;
+  private String profilePicture; // data URL or hosted URL
 }
