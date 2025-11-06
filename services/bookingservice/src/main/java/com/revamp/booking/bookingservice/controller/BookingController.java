@@ -25,12 +25,21 @@ public class BookingController {
 	 * Create a new appointment
 	 */
 	@PostMapping
-	public ResponseEntity<Appointment> createAppointment(@RequestBody Appointment appointment) {
+	public ResponseEntity<?> createAppointment(@RequestBody Appointment appointment) {
 		try {
 			Appointment created = bookingService.createAppointment(appointment);
 			return ResponseEntity.ok(created);
+		} catch (RuntimeException e) {
+			// Return error message for validation errors
+			Map<String, Object> errorResponse = new java.util.HashMap<>();
+			errorResponse.put("message", e.getMessage());
+			errorResponse.put("error", e.getClass().getSimpleName());
+			return ResponseEntity.badRequest().body(errorResponse);
 		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(null);
+			Map<String, Object> errorResponse = new java.util.HashMap<>();
+			errorResponse.put("message", "Failed to create appointment: " + e.getMessage());
+			errorResponse.put("error", "InternalServerError");
+			return ResponseEntity.status(500).body(errorResponse);
 		}
 	}
 
