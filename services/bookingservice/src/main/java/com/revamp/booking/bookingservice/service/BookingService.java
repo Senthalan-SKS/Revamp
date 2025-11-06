@@ -30,6 +30,16 @@ public class BookingService {
 	 * Create a new appointment
 	 */
 	public Appointment createAppointment(Appointment appointment) {
+		// Check if date is unavailable (for both Service and Modification)
+		if (unavailableDateService.isDateUnavailable(appointment.getDate())) {
+			throw new RuntimeException("Selected date is unavailable (holiday/maintenance)");
+		}
+		
+		// Check if it's Sunday (for both Service and Modification)
+		if (appointment.getDate().getDayOfWeek().getValue() == 7) {
+			throw new RuntimeException("Shop is closed on Sundays");
+		}
+		
 		// For Service type, book the time slot
 		if ("Service".equals(appointment.getServiceType())) {
 			if (appointment.getTimeSlotId() == null || appointment.getTimeSlotId().isEmpty()) {
@@ -51,17 +61,7 @@ public class BookingService {
 			
 			return saved;
 		} else {
-			// For Modification, check if date is unavailable
-			if (unavailableDateService.isDateUnavailable(appointment.getDate())) {
-				throw new RuntimeException("Selected date is unavailable");
-			}
-			
-			// Check if it's Sunday
-			if (appointment.getDate().getDayOfWeek().getValue() == 7) {
-				throw new RuntimeException("Shop is closed on Sundays");
-			}
-			
-			// Modification can be booked any time during shop hours (8am-5pm)
+			// For Modification, can be booked any time during shop hours (8am-5pm)
 			if (appointment.getTime() == null) {
 				appointment.setTime(LocalTime.of(8, 0)); // Default to 8am
 			}

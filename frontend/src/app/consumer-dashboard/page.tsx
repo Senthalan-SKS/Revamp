@@ -56,20 +56,25 @@ export default function ConsumerDashboard() {
         <p className="text-gray-700 mb-2">Role: {user?.role || "CONSUMER"}</p>
         <p className="text-gray-700">Email: {user?.email || "consumer@revamp.com"}</p>
 
+        {/* Book Appointment Button */}
+        <div className="mt-6">
+          <Link href="/book">
+            <button className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium shadow-md">
+              📅 Book Appointment
+            </button>
+          </Link>
+        </div>
 
-                       {/* for  Music */}
-    
-          <div className="mt-6">
+        {/* for  Music */}
+        <div className="mt-4">
           <button
             onClick={toggleMusic}
             className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition">
-            {isPlaying ? "⏸ Pause Music" : "click ME"}
+            {isPlaying ? "⏸ Pause Music" : "🎵 Play Music"}
           </button>
           <audio id="bg-audio" src="/music/theme4.mp3" loop  />
         </div>
-                          {/* for  Music  */}
-
-      
+        {/* for  Music  */}
 
       </div>
     </main>
