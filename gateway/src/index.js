@@ -55,6 +55,7 @@ const bodyParser = require("body-parser");
 const authRoutes = require("./routes/authRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 app.use(cors());
@@ -64,6 +65,7 @@ app.use(bodyParser.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/auth", employeeRoutes);
 app.use("/api", bookingRoutes);
+app.use("/api", adminRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Gateway running on port ${PORT}`));
