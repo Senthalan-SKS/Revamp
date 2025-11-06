@@ -7,6 +7,9 @@ const bodyParser = require("body-parser");
 const authRoutes = require("./routes/authRoutes");
 const customerRoutes = require("./routes/customerRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
+const taskRoutes = require("./routes/taskRoutes");
+const timeTrackingRoutes = require("./routes/timeTrackingRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 
@@ -33,6 +36,10 @@ app.use(bodyParser.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/customer", customerRoutes);
 app.use("/api/auth", employeeRoutes);
+app.use("/api/employees", employeeRoutes);
+app.use("/api/tasks", taskRoutes);
+app.use("/api/time-tracking", timeTrackingRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 /* ===== Start server ===== */
 const PORT = process.env.PORT || 4000;
