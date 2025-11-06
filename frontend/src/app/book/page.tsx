@@ -22,6 +22,8 @@ export default function BookPage() {
   const [vehicle, setVehicle] = useState<string>("");
   const [customerEmail, setCustomerEmail] = useState<string>("");
   const [modifications, setModifications] = useState<string>("");
+  const [availableModificationServices, setAvailableModificationServices] = useState<Array<{id: string, name: string, description?: string, estimatedCost?: number, estimatedHours?: number}>>([]);
+  const [selectedModificationServices, setSelectedModificationServices] = useState<string[]>([]);
 
   useEffect(() => {
     // Get user from token
@@ -29,8 +31,10 @@ export default function BookPage() {
     if (token) {
       try {
         const decoded = decodeToken(token);
-        setUser(decoded);
-        setCustomerEmail(decoded.email || "");
+        if (decoded) {
+          setUser(decoded);
+          setCustomerEmail(decoded.email || "");
+        }
       } catch (err) {
         console.error("Error decoding token:", err);
         router.push("/login");
@@ -39,6 +43,38 @@ export default function BookPage() {
       router.push("/login");
     }
   }, [router]);
+
+  useEffect(() => {
+    // Load modification services when Modification type is selected
+    if (serviceType === "Modification") {
+      loadModificationServices();
+    }
+  }, [serviceType]);
+
+  const loadModificationServices = async () => {
+    try {
+      const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const response = await fetch(`${GATEWAY_URL}/api/admin/modification-services`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (response.ok) {
+        const services = await response.json();
+        setAvailableModificationServices(services);
+      }
+    } catch (error) {
+      console.error("Error loading modification services:", error);
+    }
+  };
+
+  const handleServiceToggle = (serviceId: string) => {
+    if (selectedModificationServices.includes(serviceId)) {
+      setSelectedModificationServices(selectedModificationServices.filter(id => id !== serviceId));
+    } else {
+      setSelectedModificationServices([...selectedModificationServices, serviceId]);
+    }
+  };
 
   const handleSlotSelect = (slotId: string | null, timeSlot: TimeSlot | null) => {
     setSelectedSlotId(slotId);
@@ -72,17 +108,34 @@ export default function BookPage() {
       }
 
       // Validate booking
+      if (!user?.userId) {
+        setError("User information not available. Please login again.");
+        setLoading(false);
+        return;
+      }
+      
       const validation = await validateBooking({
         serviceType,
         date: selectedDate,
         timeSlotId: selectedSlotId || undefined,
-        customerId: user?.userId || "",
+        customerId: String(user.userId),
       });
 
       if (!validation.isValid) {
         setError(validation.errors.join(", "));
         setLoading(false);
         return;
+      }
+
+      // Prepare modifications list
+      let modificationsList: string[] = [];
+      if (serviceType === "Modification") {
+        // Combine selected services and custom modifications
+        const selectedServiceNames = selectedModificationServices
+          .map(id => availableModificationServices.find(s => s.id === id)?.name)
+          .filter(name => name) as string[];
+        const customMods = modifications.split(",").map(m => m.trim()).filter(m => m);
+        modificationsList = [...selectedServiceNames, ...customMods];
       }
 
       // Prepare booking data
@@ -94,7 +147,7 @@ export default function BookPage() {
         serviceType: serviceType,
         date: selectedDate,
         timeSlotId: selectedSlotId || undefined,
-        modifications: serviceType === "Modification" ? modifications.split(",").map(m => m.trim()).filter(m => m) : undefined,
+        modifications: serviceType === "Modification" && modificationsList.length > 0 ? modificationsList : undefined,
         status: "Pending",
       };
 
@@ -109,8 +162,8 @@ export default function BookPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to create booking");
+        const errorData = await response.json().catch(() => ({ message: "Failed to create booking" }));
+        throw new Error((errorData as any).message || "Failed to create booking");
       }
 
       const booking = await response.json();
@@ -122,6 +175,7 @@ export default function BookPage() {
       setSelectedTimeSlot(null);
       setVehicle("");
       setModifications("");
+      setSelectedModificationServices([]);
 
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
@@ -188,6 +242,8 @@ export default function BookPage() {
                     setServiceType("Modification");
                     setSelectedSlotId(null);
                     setSelectedTimeSlot(null);
+                    setSelectedModificationServices([]);
+                    setModifications("");
                   }}
                   className={`p-4 rounded-lg border-2 transition-all ${
                     serviceType === "Modification"
@@ -274,20 +330,68 @@ export default function BookPage() {
             {/* Modifications (only for Modification type) */}
             {serviceType === "Modification" && (
               <div>
-                <label htmlFor="modifications" className="block text-sm font-medium text-gray-700 mb-2">
-                  Desired Modifications
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Modification Services
                 </label>
-                <textarea
-                  id="modifications"
-                  value={modifications}
-                  onChange={(e) => setModifications(e.target.value)}
-                  placeholder="e.g., Engine upgrade, Body kit, Audio system"
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Please describe the modifications you need (comma-separated)
-                </p>
+                {availableModificationServices.length > 0 ? (
+                  <div className="space-y-3 mb-4">
+                    {availableModificationServices.map((service) => (
+                      <div
+                        key={service.id}
+                        onClick={() => handleServiceToggle(service.id)}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedModificationServices.includes(service.id)
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedModificationServices.includes(service.id)}
+                                onChange={() => handleServiceToggle(service.id)}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <h3 className="font-semibold text-gray-900">{service.name}</h3>
+                            </div>
+                            {service.description && (
+                              <p className="text-sm text-gray-600 mt-1 ml-6">{service.description}</p>
+                            )}
+                            <div className="flex gap-4 text-xs text-gray-500 mt-2 ml-6">
+                              {service.estimatedCost && (
+                                <span>Est. Cost: ${service.estimatedCost}</span>
+                              )}
+                              {service.estimatedHours && (
+                                <span>Est. Time: {service.estimatedHours} hrs</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 mb-3">No modification services available. Please contact admin.</p>
+                )}
+                <div>
+                  <label htmlFor="modifications" className="block text-sm font-medium text-gray-700 mb-2">
+                    Additional Modifications (Optional)
+                  </label>
+                  <textarea
+                    id="modifications"
+                    value={modifications}
+                    onChange={(e) => setModifications(e.target.value)}
+                    placeholder="e.g., Custom paint job, Special wiring, etc. (comma-separated)"
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Add any additional modifications not listed above (comma-separated)
+                  </p>
+                </div>
               </div>
             )}
 
@@ -368,4 +472,5 @@ export default function BookPage() {
     </div>
   );
 }
+
 
