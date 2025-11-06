@@ -22,3 +22,4 @@ fi
 # Run the service
 ./mvnw spring-boot:run
 
+
