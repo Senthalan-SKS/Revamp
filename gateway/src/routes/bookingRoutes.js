@@ -20,6 +20,8 @@ router.use("/bookings", async (req, res) => {
 			headers: {
 				"Content-Type": "application/json",
 			},
+			// Add timeout to prevent hanging requests
+			signal: AbortSignal.timeout(30000), // 30 second timeout
 		};
 
 		// Forward Authorization header if present
@@ -47,7 +49,28 @@ router.use("/bookings", async (req, res) => {
 	} catch (error) {
 		console.error("[Gateway] Booking service error:", error);
 		console.error("[Gateway] Error stack:", error.stack);
-		res.status(500).json({ message: "Gateway error: " + error.message });
+		
+		// Provide more specific error messages
+		let statusCode = 500;
+		let errorMessage = "Internal server error";
+		
+		if (error.code === 'ECONNREFUSED') {
+			statusCode = 503; // Service Unavailable
+			errorMessage = "Booking service is currently unavailable. Please ensure the booking service is running on port 8084.";
+			console.error(`[Gateway] Connection refused to booking service at ${BOOKING_SERVICE}. Is the service running?`);
+		} else if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+			statusCode = 504; // Gateway Timeout
+			errorMessage = "Booking service request timed out. The service may be overloaded or not responding.";
+		} else if (error.message) {
+			errorMessage = error.message;
+		}
+		
+		res.status(statusCode).json({ 
+			message: errorMessage,
+			error: "BookingServiceUnavailable",
+			service: "booking-service",
+			serviceUrl: BOOKING_SERVICE
+		});
 	}
 });
 
