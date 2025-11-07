@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import PaymentModal from "@/components/booking/PaymentModal";
+import { createAppointment, createPaymentIntent, listModificationItems } from "@/lib/api";
+import type { ModificationItem } from "@/types/booking";
 
 interface Vehicle {
   id: string;
@@ -24,30 +27,11 @@ interface Vehicle {
   registrationNumber: string;
 }
 
-interface ModificationService {
-  id: string;
-  name: string;
-  estimatedHours: number;
-  description?: string;
-}
-
 interface ModificationBookingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   registeredVehicles: Vehicle[];
 }
-
-// Mock modification services - replace with API call
-const modificationServices: ModificationService[] = [
-  { id: "1", name: "Engine Change", estimatedHours: 16, description: "Complete engine replacement" },
-  { id: "2", name: "Painting", estimatedHours: 12, description: "Full body paint job" },
-  { id: "3", name: "Interior Upgrade", estimatedHours: 8, description: "Seats, dashboard, and upholstery" },
-  { id: "4", name: "Performance Tuning", estimatedHours: 6, description: "ECU tuning and modifications" },
-  { id: "5", name: "Body Kit Installation", estimatedHours: 10, description: "Install custom body kit" },
-  { id: "6", name: "Suspension Upgrade", estimatedHours: 8, description: "Full suspension system upgrade" },
-  { id: "7", name: "Wheels & Tires", estimatedHours: 2, description: "Install new wheels and tires" },
-  { id: "8", name: "Audio System", estimatedHours: 6, description: "Complete audio system installation" },
-];
 
 export default function ModificationBookingModal({
   open,
@@ -65,6 +49,25 @@ export default function ModificationBookingModal({
   });
   const [remarks, setRemarks] = useState("");
   const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<ModificationItem[]>([]);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | undefined>();
+  const [bookingId, setBookingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await listModificationItems();
+        if (!cancelled) setItems(data);
+      } catch (e) {
+        if (!cancelled) setItems([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleServiceToggle = (serviceId: string) => {
     setSelectedServices((prev) =>
@@ -74,57 +77,73 @@ export default function ModificationBookingModal({
     );
   };
 
-  const calculateEstimatedTime = () => {
-    if (selectedServices.length === 0) return 0;
-    
-    // Add extra time for multiple services (logistics, setup time)
-    const baseHours = selectedServices.reduce((total, serviceId) => {
-      const service = modificationServices.find((s) => s.id === serviceId);
-      return total + (service?.estimatedHours || 0);
+  const calculateEstimatedTime = useMemo(() => {
+    const hours = selectedServices.reduce((total, id) => {
+      const s = items.find((x) => x.id === id);
+      return total + (s?.estimatedHours || 0);
     }, 0);
-    
-    // Add buffer time based on number of services
-    const bufferMultiplier = 1 + (selectedServices.length - 1) * 0.1;
-    return Math.ceil(baseHours * bufferMultiplier);
-  };
+    const bufferMultiplier = selectedServices.length > 1 ? 1 + (selectedServices.length - 1) * 0.1 : 1;
+    return Math.ceil(hours * bufferMultiplier);
+  }, [selectedServices, items]);
 
-  const calculateEstimatedCost = () => {
-    // Mock calculation - replace with actual pricing logic
-    const estimatedHours = calculateEstimatedTime();
-    const hourlyRate = 5000; // Mock rate
-    return estimatedHours * hourlyRate;
-  };
+  const calculateEstimatedCost = useMemo(() => {
+    const sum = selectedServices.reduce((total, id) => {
+      const s = items.find((x) => x.id === id);
+      return total + (s?.unitPrice || 0);
+    }, 0);
+    return sum;
+  }, [selectedServices, items]);
 
-  const handleSubmit = async () => {
+  const estimatedDays = useMemo(() => Math.ceil(calculateEstimatedTime / 8), [calculateEstimatedTime]);
+
+  const handleOpenPayment = async () => {
     setLoading(true);
-    
-    // Prepare booking data
-    const bookingData = {
-      vehicleType: selectedVehicle,
-      date: selectedDate,
-      services: selectedServices,
-      estimatedTime: calculateEstimatedTime(),
-      estimatedCost: calculateEstimatedCost(),
-      remarks,
-      ...(selectedVehicle === "other" && {
-        vehicleDetails: otherVehicleDetails,
-      }),
-    };
+    try {
+      // Create appointment first
+      const body = {
+        serviceType: "Modification" as const,
+        date: selectedDate,
+        neededModifications: selectedServices,
+        estimatedTimeHours: calculateEstimatedTime,
+        estimatedCost: calculateEstimatedCost,
+        instructions: remarks,
+        ...(selectedVehicle !== "other"
+          ? { vehicleId: selectedVehicle }
+          : {
+              vehicleDetails: {
+                make: otherVehicleDetails.make,
+                model: otherVehicleDetails.model,
+                year: Number(otherVehicleDetails.year),
+                registrationNumber: otherVehicleDetails.registrationNumber,
+              },
+            }),
+      };
+      const appointment = await createAppointment(body);
+      setBookingId(appointment.id);
 
-    console.log("Modification Booking data:", bookingData);
-
-    // TODO: Replace with actual API call
-    setTimeout(() => {
+      // Create payment intent
+      const payment = await createPaymentIntent(appointment.id, calculateEstimatedCost);
+      setClientSecret(payment.clientSecret);
+      setPaymentOpen(true);
+    } catch (e) {
+      alert("Failed to create booking: " + (e instanceof Error ? e.message : "Unknown error"));
+    } finally {
       setLoading(false);
-      alert("Modification booking submitted successfully!");
-      onOpenChange(false);
-      // Reset form
-      setSelectedVehicle("");
-      setSelectedDate("");
-      setSelectedServices([]);
-      setOtherVehicleDetails({ make: "", model: "", year: "", registrationNumber: "" });
-      setRemarks("");
-    }, 1000);
+    }
+  };
+
+  const afterPayment = async (payload: { method: "card" | "cash"; paymentIntentId?: string }) => {
+    alert(`Modification request confirmed! ${payload.method === "card" ? "Payment processed." : "Cash payment will be collected on admission."}`);
+    onOpenChange(false);
+    setPaymentOpen(false);
+    // reset
+    setSelectedVehicle("");
+    setSelectedDate("");
+    setSelectedServices([]);
+    setOtherVehicleDetails({ make: "", model: "", year: "", registrationNumber: "" });
+    setRemarks("");
+    setClientSecret(undefined);
+    setBookingId(null);
   };
 
   const getMinDate = () => {
@@ -132,10 +151,6 @@ export default function ModificationBookingModal({
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow.toISOString().split("T")[0];
   };
-
-  const selectedServicesData = selectedServices.map((id) =>
-    modificationServices.find((s) => s.id === id)
-  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -264,7 +279,7 @@ export default function ModificationBookingModal({
                 Select Modification Services
               </Label>
               <div className="space-y-3 max-h-60 overflow-y-auto border rounded-lg p-4">
-                {modificationServices.map((service) => (
+                {items.map((service) => (
                   <div
                     key={service.id}
                     className="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
@@ -283,6 +298,11 @@ export default function ModificationBookingModal({
                         <span className="text-xs bg-[#3E92CC] text-white px-2 py-1 rounded">
                           ~{service.estimatedHours}h
                         </span>
+                        {typeof service.unitPrice === "number" && (
+                          <span className="text-xs bg-[#00F9FF] text-[#0A0A0B] px-2 py-1 rounded">
+                            Rs. {service.unitPrice.toLocaleString()}
+                          </span>
+                        )}
                       </Label>
                       {service.description && (
                         <p className="text-sm text-gray-500 mt-1">
@@ -301,13 +321,13 @@ export default function ModificationBookingModal({
                     <div>
                       <p className="text-sm font-medium">Estimated Time</p>
                       <p className="text-2xl font-bold">
-                        {calculateEstimatedTime()} hours
+                        {calculateEstimatedTime} hours (~{estimatedDays} day{estimatedDays > 1 ? "s" : ""})
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium">Estimated Cost</p>
                       <p className="text-2xl font-bold">
-                        Rs. {calculateEstimatedCost().toLocaleString()}
+                        Rs. {calculateEstimatedCost.toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -342,7 +362,7 @@ export default function ModificationBookingModal({
           </Button>
           <Button
             type="button"
-            onClick={handleSubmit}
+            onClick={handleOpenPayment}
             disabled={
               !selectedVehicle ||
               !selectedDate ||
@@ -356,10 +376,18 @@ export default function ModificationBookingModal({
             }
             className="bg-[#00F9FF] text-[#0A0A0B] hover:bg-[#4CC9F4]"
           >
-            {loading ? "Booking..." : "Book Modification"}
+            Proceed to Payment
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <PaymentModal
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        amount={calculateEstimatedCost}
+        clientSecret={clientSecret}
+        onConfirm={afterPayment}
+      />
     </Dialog>
   );
 }

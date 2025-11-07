@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import PaymentModal from "@/components/booking/PaymentModal";
+import { checkAvailability, createAppointment, createPaymentIntent } from "@/lib/api";
+import type { TimeSlot } from "@/types/booking";
 
 interface Vehicle {
   id: string;
@@ -36,7 +39,7 @@ export default function ServiceBookingModal({
 }: ServiceBookingModalProps) {
   const [selectedVehicle, setSelectedVehicle] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>("");
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>("");
+  const [selectedTimeSlotId, setSelectedTimeSlotId] = useState<string>("");
   const [otherVehicleDetails, setOtherVehicleDetails] = useState({
     make: "",
     model: "",
@@ -45,47 +48,78 @@ export default function ServiceBookingModal({
   });
   const [remarks, setRemarks] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slots, setSlots] = useState<TimeSlot[]>([]);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | undefined>();
+  const [bookingId, setBookingId] = useState<string | null>(null);
+  const [serviceAmount] = useState(5000); // Fixed service amount in LKR
 
-  // Mock time slots - replace with API call
-  const timeSlots = [
-    "09:00 AM",
-    "10:00 AM",
-    "11:00 AM",
-    "12:00 PM",
-    "01:00 PM",
-    "02:00 PM",
-    "03:00 PM",
-    "04:00 PM",
-  ];
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    
-    // Prepare booking data
-    const bookingData = {
-      vehicleType: selectedVehicle,
-      date: selectedDate,
-      timeSlot: selectedTimeSlot,
-      remarks,
-      ...(selectedVehicle === "other" && {
-        vehicleDetails: otherVehicleDetails,
-      }),
+  useEffect(() => {
+    if (!selectedDate) {
+      setSlots([]);
+      setSelectedTimeSlotId("");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await checkAvailability(selectedDate);
+        if (!cancelled) setSlots(data.filter((s) => s.isAvailable));
+      } catch (e) {
+        if (!cancelled) setSlots([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
+  }, [selectedDate]);
 
-    console.log("Booking data:", bookingData);
+  const handleOpenPayment = async () => {
+    setLoading(true);
+    try {
+      // Create appointment first
+      const body = {
+        serviceType: "Service" as const,
+        date: selectedDate,
+        timeSlotId: selectedTimeSlotId,
+        instructions: remarks,
+        ...(selectedVehicle !== "other"
+          ? { vehicleId: selectedVehicle }
+          : {
+              vehicleDetails: {
+                make: otherVehicleDetails.make,
+                model: otherVehicleDetails.model,
+                year: Number(otherVehicleDetails.year),
+                registrationNumber: otherVehicleDetails.registrationNumber,
+              },
+            }),
+      };
+      const appointment = await createAppointment(body);
+      setBookingId(appointment.id);
 
-    // TODO: Replace with actual API call
-    setTimeout(() => {
+      // Create payment intent
+      const payment = await createPaymentIntent(appointment.id, serviceAmount);
+      setClientSecret(payment.clientSecret);
+      setPaymentOpen(true);
+    } catch (e) {
+      alert("Failed to create booking: " + (e instanceof Error ? e.message : "Unknown error"));
+    } finally {
       setLoading(false);
-      alert("Booking submitted successfully!");
-      onOpenChange(false);
-      // Reset form
-      setSelectedVehicle("");
-      setSelectedDate("");
-      setSelectedTimeSlot("");
-      setOtherVehicleDetails({ make: "", model: "", year: "", registrationNumber: "" });
-      setRemarks("");
-    }, 1000);
+    }
+  };
+
+  const afterPayment = async (payload: { method: "card" | "cash"; paymentIntentId?: string }) => {
+    alert(`Booking confirmed! ${payload.method === "card" ? "Payment processed." : "Cash payment will be collected on admission."}`);
+    onOpenChange(false);
+    setPaymentOpen(false);
+    // reset
+    setSelectedVehicle("");
+    setSelectedDate("");
+    setSelectedTimeSlotId("");
+    setOtherVehicleDetails({ make: "", model: "", year: "", registrationNumber: "" });
+    setRemarks("");
+    setClientSecret(undefined);
+    setBookingId(null);
   };
 
   const getMinDate = () => {
@@ -218,24 +252,25 @@ export default function ServiceBookingModal({
           {selectedDate && (
             <div className="space-y-3">
               <Label className="text-base font-semibold">Available Time Slots</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {timeSlots.map((slot) => (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {slots.map((slot) => (
                   <Button
-                    key={slot}
+                    key={slot.id}
                     type="button"
-                    variant={
-                      selectedTimeSlot === slot ? "default" : "outline"
-                    }
-                    onClick={() => setSelectedTimeSlot(slot)}
+                    variant={selectedTimeSlotId === slot.id ? "default" : "outline"}
+                    onClick={() => setSelectedTimeSlotId(slot.id)}
                     className={
-                      selectedTimeSlot === slot
+                      selectedTimeSlotId === slot.id
                         ? "bg-[#00F9FF] text-[#0A0A0B] hover:bg-[#4CC9F4]"
                         : ""
                     }
                   >
-                    {slot}
+                    {slot.startTime} - {slot.endTime}
                   </Button>
                 ))}
+                {slots.length === 0 && (
+                  <div className="text-sm text-gray-500">No slots available for the selected date.</div>
+                )}
               </div>
             </div>
           )}
@@ -266,11 +301,11 @@ export default function ServiceBookingModal({
           </Button>
           <Button
             type="button"
-            onClick={handleSubmit}
+            onClick={handleOpenPayment}
             disabled={
               !selectedVehicle ||
               !selectedDate ||
-              !selectedTimeSlot ||
+              !selectedTimeSlotId ||
               (selectedVehicle === "other" &&
                 (!otherVehicleDetails.make ||
                   !otherVehicleDetails.model ||
@@ -280,10 +315,18 @@ export default function ServiceBookingModal({
             }
             className="bg-[#00F9FF] text-[#0A0A0B] hover:bg-[#4CC9F4]"
           >
-            {loading ? "Booking..." : "Book Service"}
+            Proceed to Payment
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <PaymentModal
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        amount={serviceAmount}
+        clientSecret={clientSecret}
+        onConfirm={afterPayment}
+      />
     </Dialog>
   );
 }
