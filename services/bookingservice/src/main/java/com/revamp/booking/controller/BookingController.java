@@ -15,6 +15,8 @@ import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,7 +26,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
-@RequiredArgsConstructor
 public class BookingController {
 
     private final BookingService bookingService;
@@ -32,10 +33,51 @@ public class BookingController {
     private final BookingRepository bookingRepository;
     private final StripeService stripeService;
     private final JwtUtil jwtUtil;
+    private final MongoTemplate modificationServicesTemplate;
+
+    public BookingController(
+            BookingService bookingService,
+            ModificationItemRepository modificationItemRepository,
+            BookingRepository bookingRepository,
+            StripeService stripeService,
+            JwtUtil jwtUtil,
+            @Qualifier("modificationServicesTemplate") MongoTemplate modificationServicesTemplate
+    ) {
+        this.bookingService = bookingService;
+        this.modificationItemRepository = modificationItemRepository;
+        this.bookingRepository = bookingRepository;
+        this.stripeService = stripeService;
+        this.jwtUtil = jwtUtil;
+        this.modificationServicesTemplate = modificationServicesTemplate;
+    }
 
     @GetMapping("/modifications")
     public List<ModificationItem> listModifications() {
-        return modificationItemRepository.findAll();
+        // Use the qualified MongoTemplate to read from Time-slot database
+        // where modificationservices collection is stored
+        System.out.println("===== Fetching Modification Services =====");
+        System.out.println("Using modificationServicesTemplate");
+        System.out.println("Collection: modificationservices");
+        
+        List<ModificationItem> items = modificationServicesTemplate.findAll(ModificationItem.class);
+        
+        System.out.println("Found " + items.size() + " modification service(s)");
+        if (items.size() > 0) {
+            System.out.println("Services:");
+            for (ModificationItem item : items) {
+                System.out.println("  - ID: " + item.getId() + ", Name: " + item.getName());
+            }
+        }
+        System.out.println("============================================");
+        
+        // Map estimatedCost (Double) to unitPrice (Integer) for compatibility
+        items.forEach(item -> {
+            if (item.getEstimatedCost() != null && item.getUnitPrice() == null) {
+                item.setUnitPrice(item.getEstimatedCost().intValue());
+            }
+        });
+        
+        return items;
     }
 
     @PostMapping("/bookings/appointments")
