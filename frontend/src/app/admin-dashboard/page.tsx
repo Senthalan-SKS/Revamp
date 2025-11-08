@@ -914,6 +914,17 @@ export default function AdminDashboard() {
             skills: employeeForm.skillSet,
           });
           try {
+            console.log("Sending employee details request with payload:", {
+              userId: data.id,
+              fullName: employeeForm.name,
+              email: employeeForm.email,
+              phoneNumber: employeeForm.phone || "",
+              skills: employeeForm.skillSet,
+              skillsType: typeof employeeForm.skillSet,
+              skillsIsArray: Array.isArray(employeeForm.skillSet),
+              skillsLength: employeeForm.skillSet?.length
+            });
+            
             const detailsResponse = await fetch(`${GATEWAY_URL}/api/auth/employee-details`, {
               method: "POST",
               headers: {
@@ -924,24 +935,45 @@ export default function AdminDashboard() {
                 fullName: employeeForm.name,
                 email: employeeForm.email,
                 phoneNumber: employeeForm.phone || "",
-                skills: employeeForm.skillSet,
+                skills: employeeForm.skillSet || [],
               }),
             });
 
-            const detailsData = await detailsResponse.json();
+            console.log("Employee details response status:", detailsResponse.status);
+            console.log("Employee details response ok:", detailsResponse.ok);
             
-            console.log("Employee details save response:", detailsData);
+            // Get response text first to handle potential parsing errors
+            const responseText = await detailsResponse.text();
+            console.log("Employee details response text:", responseText);
+            
+            let detailsData: any = {};
+            try {
+              detailsData = responseText ? JSON.parse(responseText) : {};
+            } catch (parseError) {
+              console.error("Failed to parse employee details response as JSON:", parseError);
+              console.error("Response text was:", responseText);
+              throw new Error(`Invalid response from server: ${responseText || "Empty response"}`);
+            }
+            
+            console.log("Employee details save response (parsed):", detailsData);
             
             if (!detailsResponse.ok) {
-              console.error("Failed to save employee details:", detailsData);
-              showToast("Employee registered but details could not be saved: " + (detailsData.message || "Unknown error"), "error");
+              const errorMessage = detailsData.message || detailsData.error || `HTTP ${detailsResponse.status} error`;
+              console.error("Failed to save employee details:", {
+                status: detailsResponse.status,
+                statusText: detailsResponse.statusText,
+                data: detailsData
+              });
+              showToast(`Employee registered but details could not be saved: ${errorMessage}`, "error");
             } else {
               console.log("✓ Employee details saved successfully to EAD-Employes database");
+              console.log("Saved details:", detailsData);
               showToast("Employee registered successfully with all details saved!");
             }
           } catch (detailsError: any) {
             console.error("Error saving employee details:", detailsError);
-            showToast("Employee registered but some details could not be saved: " + detailsError.message, "error");
+            console.error("Error stack:", detailsError.stack);
+            showToast("Employee registered but some details could not be saved: " + (detailsError.message || "Unknown error"), "error");
           }
         } else {
           console.warn("Employee registered but no ID returned, cannot save employee details");
