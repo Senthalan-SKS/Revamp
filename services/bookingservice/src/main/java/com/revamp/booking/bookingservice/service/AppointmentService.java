@@ -30,6 +30,18 @@ public class AppointmentService {
 	 * Create a new appointment
 	 */
 	public Appointment createAppointment(Appointment appointment) {
+		System.out.println("===== AppointmentService.createAppointment =====");
+		System.out.println("Input appointment data:");
+		System.out.println("  Customer ID: " + appointment.getCustomerId());
+		System.out.println("  Customer Name: " + appointment.getCustomerName());
+		System.out.println("  Customer Email: " + appointment.getCustomerEmail());
+		System.out.println("  Vehicle ID: " + appointment.getVehicleId());
+		System.out.println("  Vehicle: " + appointment.getVehicle());
+		System.out.println("  Vehicle Details: " + appointment.getVehicleDetails());
+		System.out.println("  Service Type: " + appointment.getServiceType());
+		System.out.println("  Date: " + appointment.getDate());
+		System.out.println("  Status: " + appointment.getStatus());
+		
 		// Check if date is unavailable (for both Service and Modification)
 		if (unavailableDateService.isDateUnavailable(appointment.getDate())) {
 			throw new RuntimeException("Selected date is unavailable (holiday/maintenance)");
@@ -51,25 +63,122 @@ public class AppointmentService {
 			appointment.setTime(slot.getStartTime());
 			appointment.setEndTime(slot.getEndTime());
 			
-			// Save appointment first to get ID
-			appointment.setStatus("Pending");
-			Appointment saved = mongoTemplate.save(appointment);
-			
-			// Update slot with appointment ID
-			slot.setAppointmentId(saved.getId());
-			mongoTemplate.save(slot);
-			
-			return saved;
+			// Set timeSlotStart and timeSlotEnd as String (HH:mm format)
+			if (slot.getStartTime() != null) {
+				appointment.setTimeSlotStart(slot.getStartTime().toString());
+			}
+			if (slot.getEndTime() != null) {
+				appointment.setTimeSlotEnd(slot.getEndTime().toString());
+			}
 		} else {
 			// For Modification, can be booked any time during shop hours (8am-5pm)
 			if (appointment.getTime() == null) {
 				appointment.setTime(LocalTime.of(8, 0)); // Default to 8am
 			}
 			appointment.setEndTime(LocalTime.of(17, 0)); // End at 5pm
+			
+			// Set timeSlotStart and timeSlotEnd for modifications
+			if (appointment.getTime() != null) {
+				appointment.setTimeSlotStart(appointment.getTime().toString());
+			}
+			if (appointment.getEndTime() != null) {
+				appointment.setTimeSlotEnd(appointment.getEndTime().toString());
+			}
 		}
 		
-		appointment.setStatus("Pending");
-		return mongoTemplate.save(appointment);
+		// Ensure status is set (but don't overwrite if already set)
+		if (appointment.getStatus() == null || appointment.getStatus().isEmpty()) {
+			appointment.setStatus("Pending");
+		}
+		
+		// Ensure timestamps are set (but don't overwrite if already set)
+		if (appointment.getCreatedAt() == null) {
+			appointment.setCreatedAt(java.time.LocalDateTime.now());
+		}
+		if (appointment.getUpdatedAt() == null) {
+			appointment.setUpdatedAt(java.time.LocalDateTime.now());
+		}
+		
+		System.out.println("Appointment before saving to MongoDB:");
+		System.out.println("  Customer ID: " + appointment.getCustomerId());
+		System.out.println("  Customer Name: " + appointment.getCustomerName());
+		System.out.println("  Customer Email: " + appointment.getCustomerEmail());
+		System.out.println("  Vehicle ID: " + appointment.getVehicleId());
+		System.out.println("  Vehicle: " + appointment.getVehicle());
+		System.out.println("  Vehicle Details: " + appointment.getVehicleDetails());
+		System.out.println("  Service Type: " + appointment.getServiceType());
+		System.out.println("  Date: " + appointment.getDate());
+		System.out.println("  Status: " + appointment.getStatus());
+		
+		// CRITICAL: Ensure customer info is set (should not be null at this point)
+		if (appointment.getCustomerId() == null || appointment.getCustomerId().isEmpty()) {
+			System.err.println("ERROR: Customer ID is null before saving! This should not happen.");
+			throw new RuntimeException("Customer ID is required but was not set");
+		}
+		if (appointment.getCustomerEmail() == null || appointment.getCustomerEmail().isEmpty()) {
+			System.err.println("WARNING: Customer Email is null before saving!");
+		}
+		
+		// Save appointment using insert to ensure it's a new document
+		Appointment saved;
+		try {
+			// Use insert instead of save to ensure it's a new document
+			mongoTemplate.insert(appointment);
+			saved = appointment; // After insert, the appointment object will have the generated ID
+			
+			System.out.println("Appointment inserted to MongoDB with ID: " + saved.getId());
+		} catch (Exception e) {
+			System.err.println("ERROR saving appointment to MongoDB: " + e.getMessage());
+			e.printStackTrace();
+			// Fallback to save if insert fails (might be due to ID conflict)
+			saved = mongoTemplate.save(appointment);
+			System.out.println("Used save() fallback, appointment ID: " + saved.getId());
+		}
+		
+		// Verify the saved data by querying it back from MongoDB
+		Query verifyQuery = new Query(Criteria.where("_id").is(saved.getId()));
+		Appointment verified = mongoTemplate.findOne(verifyQuery, Appointment.class);
+		
+		System.out.println("=== VERIFICATION: Querying back from MongoDB ===");
+		if (verified != null) {
+			System.out.println("  ID: " + verified.getId());
+			System.out.println("  Customer ID: " + verified.getCustomerId());
+			System.out.println("  Customer Name: " + verified.getCustomerName());
+			System.out.println("  Customer Email: " + verified.getCustomerEmail());
+			System.out.println("  Vehicle ID: " + verified.getVehicleId());
+			System.out.println("  Vehicle: " + verified.getVehicle());
+			System.out.println("  Vehicle Details: " + verified.getVehicleDetails());
+			
+			// If verification shows null values, that's a problem
+			if (verified.getCustomerId() == null) {
+				System.err.println("ERROR: Customer ID is null in database after saving!");
+			}
+			if (verified.getCustomerEmail() == null) {
+				System.err.println("ERROR: Customer Email is null in database after saving!");
+			}
+			if (verified.getVehicle() == null && verified.getVehicleId() == null && verified.getVehicleDetails() == null) {
+				System.err.println("WARNING: All vehicle fields are null in database after saving!");
+			}
+			
+			// Update the saved object with verified data
+			saved = verified;
+		} else {
+			System.err.println("ERROR: Could not verify appointment in database - query returned null!");
+		}
+		System.out.println("================================================");
+		
+		// For Service type, update slot with appointment ID
+		if ("Service".equals(appointment.getServiceType())) {
+			TimeSlot slot = timeSlotService.getSlotById(appointment.getTimeSlotId()).orElse(null);
+			if (slot != null) {
+				slot.setAppointmentId(saved.getId());
+				mongoTemplate.save(slot);
+			}
+		}
+		
+		System.out.println("============================================");
+		
+		return saved;
 	}
 
 	/**

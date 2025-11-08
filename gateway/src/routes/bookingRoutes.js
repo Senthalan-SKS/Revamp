@@ -39,9 +39,17 @@ router.use("/bookings", async (req, res) => {
 			},
 		};
 
-		// Forward Authorization header if present
-		if (req.headers["authorization"]) {
-			fetchOptions.headers["Authorization"] = req.headers["authorization"];
+		// Forward Authorization header if present (check both lowercase and uppercase)
+		const authHeader = req.headers["authorization"] || req.headers["Authorization"];
+		if (authHeader) {
+			fetchOptions.headers["Authorization"] = authHeader;
+			console.log(`[Gateway] Forwarding Authorization header (length: ${authHeader.length})`);
+			console.log(`[Gateway] Authorization header starts with Bearer: ${authHeader.startsWith("Bearer ")}`);
+			console.log(`[Gateway] Authorization header (first 50 chars): ${authHeader.substring(0, Math.min(50, authHeader.length))}...`);
+		} else {
+			console.log(`[Gateway] WARNING: No Authorization header in request!`);
+			console.log(`[Gateway] Available headers:`, Object.keys(req.headers));
+			console.log(`[Gateway] All header values:`, JSON.stringify(req.headers, null, 2));
 		}
 
 		// Only add body for methods that support it
