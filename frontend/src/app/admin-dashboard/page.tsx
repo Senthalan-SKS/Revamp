@@ -640,7 +640,47 @@ export default function AdminDashboard() {
     }
   }, [activeView]);
 
+  // Load modification services when appointments view loads (to display modification names)
+  useEffect(() => {
+    if (activeView === "appointments" && modificationServices.length === 0) {
+      loadModificationServices();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
+
   const greeting = getGreeting();
+
+  // Helper function to get modification service names from IDs
+  const getModificationServiceNames = (modificationIds: string[] | undefined): string[] => {
+    if (!modificationIds || modificationIds.length === 0) {
+      return [];
+    }
+    
+    // If modification services haven't loaded yet, return the IDs/names as-is
+    if (modificationServices.length === 0) {
+      console.warn("Modification services not loaded yet, returning IDs as-is:", modificationIds);
+      return modificationIds;
+    }
+    
+    return modificationIds
+      .map(id => {
+        // Try to find by ID first (most common case)
+        const service = modificationServices.find(s => s.id === id);
+        if (service) {
+          return service.name;
+        }
+        // If not found by ID, it might already be a name (for backward compatibility)
+        // Check if any service has this as a name
+        const serviceByName = modificationServices.find(s => s.name === id);
+        if (serviceByName) {
+          return serviceByName.name;
+        }
+        // If still not found, return the ID/name as-is (will display as-is)
+        console.warn(`Modification service not found for ID/name: ${id}`);
+        return id;
+      })
+      .filter(name => name); // Remove any null/undefined values
+  };
 
   const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
     const id = Date.now().toString();
@@ -1199,18 +1239,27 @@ export default function AdminDashboard() {
       return;
     }
     
+    if (!modificationServiceForm.estimatedHours || !modificationServiceForm.estimatedHours.trim()) {
+      showToast("Please enter estimated hours", "error");
+      return;
+    }
+    
+    const estimatedHours = parseInt(modificationServiceForm.estimatedHours);
+    if (isNaN(estimatedHours) || estimatedHours <= 0) {
+      showToast("Estimated hours must be a positive number", "error");
+      return;
+    }
+    
     try {
       const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
       const requestBody: any = {
         name: modificationServiceForm.name,
         description: modificationServiceForm.description || "",
+        estimatedHours: estimatedHours,
       };
       
       if (modificationServiceForm.estimatedCost) {
         requestBody.estimatedCost = parseFloat(modificationServiceForm.estimatedCost);
-      }
-      if (modificationServiceForm.estimatedHours) {
-        requestBody.estimatedHours = parseInt(modificationServiceForm.estimatedHours);
       }
       
       const response = await fetch(`${GATEWAY_URL}/api/admin/modification-services`, {
@@ -1400,6 +1449,11 @@ export default function AdminDashboard() {
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mt-1">{apt.vehicle} • {apt.serviceType}</p>
+                  {apt.serviceType === "Modification" && apt.modifications && apt.modifications.length > 0 && (
+                    <p className="text-xs text-purple-600 mt-1 font-medium">
+                      {getModificationServiceNames(apt.modifications).join(", ")}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">{apt.date} at {apt.time}</p>
                 </div>
                 {apt.estimatedCost && (
@@ -1538,14 +1592,28 @@ export default function AdminDashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-900">{apt.vehicle}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        apt.serviceType === "Service" 
-                          ? "bg-blue-100 text-blue-800" 
-                          : "bg-purple-100 text-purple-800"
-                      }`}>
-                        {apt.serviceType}
-                      </span>
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          apt.serviceType === "Service" 
+                            ? "bg-blue-100 text-blue-800" 
+                            : "bg-purple-100 text-purple-800"
+                        }`}>
+                          {apt.serviceType}
+                        </span>
+                        {apt.serviceType === "Modification" && apt.modifications && apt.modifications.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {getModificationServiceNames(apt.modifications).map((modName, idx) => (
+                              <span 
+                                key={idx}
+                                className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs border border-purple-200"
+                              >
+                                {modName}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{apt.date}</div>
@@ -2151,12 +2219,10 @@ export default function AdminDashboard() {
                           <span>${service.estimatedCost}</span>
                         </div>
                       )}
-                      {service.estimatedHours && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          <span>{service.estimatedHours} hrs</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1 font-semibold text-blue-600">
+                        <Clock className="w-4 h-4" />
+                        <span>{service.estimatedHours || 'N/A'} hrs</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -2514,6 +2580,21 @@ export default function AdminDashboard() {
               <p className="font-semibold text-gray-900">{selectedAppointment.customerName}</p>
               <p className="text-sm text-gray-700">{selectedAppointment.vehicle}</p>
               <p className="text-xs text-gray-500 mt-1">{selectedAppointment.serviceType} • {selectedAppointment.date} at {selectedAppointment.time}</p>
+              {selectedAppointment.serviceType === "Modification" && selectedAppointment.modifications && selectedAppointment.modifications.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-gray-600 font-medium mb-1">Modification Services:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {getModificationServiceNames(selectedAppointment.modifications).map((modName, idx) => (
+                      <span 
+                        key={idx}
+                        className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs border border-purple-200"
+                      >
+                        {modName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-2 mb-6 max-h-96 overflow-y-auto">
               {employees.length === 0 ? (
@@ -2870,16 +2951,18 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Estimated Hours
+                    Estimated Hours <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
                     value={modificationServiceForm.estimatedHours}
                     onChange={(e) => setModificationServiceForm({ ...modificationServiceForm, estimatedHours: e.target.value })}
                     className="w-full px-4 py-2.5 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="Optional"
-                    min="0"
+                    placeholder="e.g., 2, 4, 6"
+                    min="1"
+                    required
                   />
+                  <p className="text-xs text-gray-500 mt-1">Required: Enter the estimated number of hours for this service</p>
                 </div>
               </div>
             </div>
