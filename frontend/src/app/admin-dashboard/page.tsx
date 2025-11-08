@@ -728,9 +728,26 @@ export default function AdminDashboard() {
         }),
       });
       
+      console.log("Assign employees response status:", response.status);
+      console.log("Assign employees response ok:", response.ok);
+      
+      // Get response text first to handle potential parsing errors
+      const responseText = await response.text();
+      console.log("Assign employees response text:", responseText);
+      
+      let responseData: any = {};
+      try {
+        responseData = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        console.error("Failed to parse assign employees response as JSON:", parseError);
+        console.error("Response text was:", responseText);
+        if (!response.ok) {
+          throw new Error(`Invalid response from server: ${responseText || "Empty response"}`);
+        }
+      }
+      
       if (response.ok) {
-        const updatedAppointment = await response.json();
-        console.log("Appointment updated successfully:", updatedAppointment);
+        console.log("Appointment updated successfully:", responseData);
         
         // Update local state
         setAppointments(appointments.map(apt => 
@@ -759,9 +776,13 @@ export default function AdminDashboard() {
         // Reload appointments to get the latest data
         loadAppointments();
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to assign employees:", errorData);
-        showToast(`Failed to assign employees: ${errorData.message || "Server error"}`, "error");
+        const errorMessage = responseData.message || responseData.error || `HTTP ${response.status} error`;
+        console.error("Failed to assign employees:", {
+          status: response.status,
+          statusText: response.statusText,
+          data: responseData
+        });
+        showToast(`Failed to assign employees: ${errorMessage}`, "error");
       }
     } catch (error: any) {
       console.error("Error assigning employees:", error);

@@ -76,8 +76,16 @@ public class AppointmentService {
 	 * Get appointment by ID
 	 */
 	public Optional<Appointment> getAppointmentById(String id) {
-		Query query = new Query(Criteria.where("id").is(id));
+		// Use _id for MongoDB query (Spring Data MongoDB maps id field to _id)
+		Query query = new Query(Criteria.where("_id").is(id));
 		Appointment appointment = mongoTemplate.findOne(query, Appointment.class);
+		
+		// Fallback to "id" field if not found
+		if (appointment == null) {
+			query = new Query(Criteria.where("id").is(id));
+			appointment = mongoTemplate.findOne(query, Appointment.class);
+		}
+		
 		return Optional.ofNullable(appointment);
 	}
 
@@ -105,14 +113,22 @@ public class AppointmentService {
 	 * Update appointment status
 	 */
 	public Appointment updateAppointmentStatus(String id, String status) {
-		Query query = new Query(Criteria.where("id").is(id));
+		// Use _id for MongoDB query (Spring Data MongoDB maps id field to _id)
+		Query query = new Query(Criteria.where("_id").is(id));
 		Appointment appointment = mongoTemplate.findOne(query, Appointment.class);
 		
+		// Fallback to "id" field if not found
 		if (appointment == null) {
-			throw new RuntimeException("Appointment not found");
+			query = new Query(Criteria.where("id").is(id));
+			appointment = mongoTemplate.findOne(query, Appointment.class);
+		}
+		
+		if (appointment == null) {
+			throw new RuntimeException("Appointment not found with ID: " + id);
 		}
 		
 		appointment.setStatus(status);
+		appointment.setUpdatedAt(java.time.LocalDateTime.now());
 		return mongoTemplate.save(appointment);
 	}
 
@@ -120,16 +136,26 @@ public class AppointmentService {
 	 * Assign employees to appointment
 	 */
 	public Appointment assignEmployees(String appointmentId, List<String> employeeIds, List<String> employeeNames) {
-		Query query = new Query(Criteria.where("id").is(appointmentId));
+		// Use _id for MongoDB query (Spring Data MongoDB maps id field to _id)
+		Query query = new Query(Criteria.where("_id").is(appointmentId));
 		Appointment appointment = mongoTemplate.findOne(query, Appointment.class);
 		
 		if (appointment == null) {
-			throw new RuntimeException("Appointment not found");
+			// Try with "id" field as fallback
+			query = new Query(Criteria.where("id").is(appointmentId));
+			appointment = mongoTemplate.findOne(query, Appointment.class);
+		}
+		
+		if (appointment == null) {
+			throw new RuntimeException("Appointment not found with ID: " + appointmentId);
 		}
 		
 		appointment.setAssignedEmployeeIds(employeeIds);
 		appointment.setAssignedEmployeeNames(employeeNames);
 		appointment.setStatus("Approved");
+		
+		// Update the updatedAt timestamp
+		appointment.setUpdatedAt(java.time.LocalDateTime.now());
 		
 		return mongoTemplate.save(appointment);
 	}
@@ -138,8 +164,15 @@ public class AppointmentService {
 	 * Cancel appointment and release time slot if applicable
 	 */
 	public void cancelAppointment(String appointmentId) {
-		Query query = new Query(Criteria.where("id").is(appointmentId));
+		// Use _id for MongoDB query (Spring Data MongoDB maps id field to _id)
+		Query query = new Query(Criteria.where("_id").is(appointmentId));
 		Appointment appointment = mongoTemplate.findOne(query, Appointment.class);
+		
+		// Fallback to "id" field if not found
+		if (appointment == null) {
+			query = new Query(Criteria.where("id").is(appointmentId));
+			appointment = mongoTemplate.findOne(query, Appointment.class);
+		}
 		
 		if (appointment != null) {
 			// Release time slot if it's a Service appointment

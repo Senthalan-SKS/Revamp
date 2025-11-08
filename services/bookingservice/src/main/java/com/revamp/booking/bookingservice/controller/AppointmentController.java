@@ -61,15 +61,27 @@ public class AppointmentController {
 	 * Get all appointments
 	 */
 	@GetMapping
-	public ResponseEntity<List<Appointment>> getAllAppointments() {
+	public ResponseEntity<?> getAllAppointments() {
 		try {
+			System.out.println("===== Fetching All Appointments =====");
+			System.out.println("Querying bookings collection...");
 			List<Appointment> appointments = appointmentService.getAllAppointments();
-			System.out.println("DEBUG: Controller returning " + appointments.size() + " appointment(s)");
+			System.out.println("DEBUG: Controller returning " + appointments.size() + " appointment(s) from bookings collection");
+			for (Appointment apt : appointments) {
+				System.out.println("Appointment ID: " + apt.getId() + 
+					", Customer: " + apt.getCustomerName() + 
+					", Status: " + apt.getStatus() +
+					", Assigned Employees: " + (apt.getAssignedEmployeeNames() != null ? apt.getAssignedEmployeeNames().toString() : "None"));
+			}
+			System.out.println("======================================");
 			return ResponseEntity.ok(appointments);
 		} catch (Exception e) {
 			System.err.println("ERROR: Failed to get appointments: " + e.getMessage());
 			e.printStackTrace();
-			return ResponseEntity.badRequest().build();
+			Map<String, Object> errorResponse = new java.util.HashMap<>();
+			errorResponse.put("message", "Error fetching appointments: " + e.getMessage());
+			errorResponse.put("error", "InternalServerError");
+			return ResponseEntity.status(500).body(errorResponse);
 		}
 	}
 
@@ -106,19 +118,51 @@ public class AppointmentController {
 	 * Assign employees to appointment
 	 */
 	@PutMapping("/{id}/assign-employees")
-	public ResponseEntity<Appointment> assignEmployees(
+	public ResponseEntity<?> assignEmployees(
 			@PathVariable String id,
 			@RequestBody Map<String, Object> request) {
 		try {
+			System.out.println("===== Assign Employees Request =====");
+			System.out.println("Appointment ID: " + id);
+			System.out.println("Request body: " + request);
+			
 			@SuppressWarnings("unchecked")
 			List<String> employeeIds = (List<String>) request.get("employeeIds");
 			@SuppressWarnings("unchecked")
 			List<String> employeeNames = (List<String>) request.get("employeeNames");
 			
+			if (employeeIds == null || employeeIds.isEmpty()) {
+				Map<String, Object> errorResponse = new java.util.HashMap<>();
+				errorResponse.put("message", "Employee IDs are required");
+				errorResponse.put("error", "ValidationError");
+				return ResponseEntity.badRequest().body(errorResponse);
+			}
+			
+			if (employeeNames == null || employeeNames.isEmpty()) {
+				Map<String, Object> errorResponse = new java.util.HashMap<>();
+				errorResponse.put("message", "Employee names are required");
+				errorResponse.put("error", "ValidationError");
+				return ResponseEntity.badRequest().body(errorResponse);
+			}
+			
 			Appointment appointment = appointmentService.assignEmployees(id, employeeIds, employeeNames);
+			System.out.println("✓ Employees assigned successfully to appointment: " + id);
+			System.out.println("Assigned employees: " + employeeNames);
 			return ResponseEntity.ok(appointment);
+		} catch (RuntimeException e) {
+			System.err.println("ERROR assigning employees: " + e.getMessage());
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new java.util.HashMap<>();
+			errorResponse.put("message", e.getMessage());
+			errorResponse.put("error", e.getClass().getSimpleName());
+			return ResponseEntity.badRequest().body(errorResponse);
 		} catch (Exception e) {
-			return ResponseEntity.badRequest().build();
+			System.err.println("ERROR assigning employees: " + e.getMessage());
+			e.printStackTrace();
+			Map<String, Object> errorResponse = new java.util.HashMap<>();
+			errorResponse.put("message", "Failed to assign employees: " + e.getMessage());
+			errorResponse.put("error", "InternalServerError");
+			return ResponseEntity.status(500).body(errorResponse);
 		}
 	}
 
