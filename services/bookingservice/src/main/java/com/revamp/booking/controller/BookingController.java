@@ -45,12 +45,14 @@ public class BookingController {
     ) {
         String customerId;
         String customerName;
+        String customerEmail;
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             try {
                 Claims claims = jwtUtil.parseToken(authHeader);
                 customerId = jwtUtil.getCustomerId(claims);
                 customerName = jwtUtil.getCustomerName(claims);
+                customerEmail = jwtUtil.getCustomerEmail(claims);
             } catch (Exception e) {
                 return ResponseEntity.status(401).build();
             }
@@ -58,8 +60,84 @@ public class BookingController {
             return ResponseEntity.status(401).build();
         }
 
-        Booking saved = bookingService.createAppointment(customerId, customerName, request);
+        Booking saved = bookingService.createAppointment(customerId, customerName, customerEmail, request);
         return ResponseEntity.ok(new AppointmentResponse(saved.getId(), saved.getStatus()));
+    }
+
+    @GetMapping("/bookings")
+    public ResponseEntity<List<Booking>> getBookings(
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        String customerId;
+        
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                Claims claims = jwtUtil.parseToken(authHeader);
+                customerId = jwtUtil.getCustomerId(claims);
+            } catch (Exception e) {
+                return ResponseEntity.status(401).build();
+            }
+        } else {
+            return ResponseEntity.status(401).build();
+        }
+        
+        List<Booking> bookings = bookingRepository.findByCustomerId(customerId);
+        return ResponseEntity.ok(bookings);
+    }
+
+    @GetMapping("/bookings/appointments")
+    public ResponseEntity<List<Booking>> getAllAppointments(
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        // Check authentication
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).build();
+        }
+
+        try {
+            Claims claims = jwtUtil.parseToken(authHeader);
+            
+            // Check if user is admin
+            if (!jwtUtil.isAdmin(claims)) {
+                return ResponseEntity.status(403).build();
+            }
+            
+            // Get all bookings for admin
+            List<Booking> allBookings = bookingRepository.findAll();
+            return ResponseEntity.ok(allBookings);
+        } catch (Exception e) {
+            return ResponseEntity.status(401).build();
+        }
+    }
+
+    @DeleteMapping("/bookings/{bookingId}")
+    public ResponseEntity<Void> deleteBooking(
+            @PathVariable String bookingId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        String customerId;
+        
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                Claims claims = jwtUtil.parseToken(authHeader);
+                customerId = jwtUtil.getCustomerId(claims);
+            } catch (Exception e) {
+                return ResponseEntity.status(401).build();
+            }
+        } else {
+            return ResponseEntity.status(401).build();
+        }
+        
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+        
+        // Verify the booking belongs to the customer
+        if (!booking.getCustomerId().equals(customerId)) {
+            return ResponseEntity.status(403).build();
+        }
+        
+        bookingRepository.delete(booking);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/bookings/{bookingId}/payment-intent")

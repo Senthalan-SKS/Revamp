@@ -221,12 +221,21 @@ export default function AdminDashboard() {
   const loadAppointments = async () => {
     try {
       const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
+      const token = localStorage.getItem("token");
       
       console.log("Loading appointments from:", `${GATEWAY_URL}/api/bookings/appointments`);
       
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+      
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(`${GATEWAY_URL}/api/bookings/appointments`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers,
       });
       
       console.log("Appointments response status:", response.status);
@@ -258,9 +267,13 @@ export default function AdminDashboard() {
             }
           }
           
-          // Handle time format - LocalTime serializes as "HH:mm:ss" or "HH:mm"
+          // Handle time format - use timeSlotStart and timeSlotEnd from Booking model
           let timeStr = "";
-          if (apt.time) {
+          if (apt.timeSlotStart && apt.timeSlotEnd) {
+            // Format: "08:00-11:00"
+            timeStr = `${apt.timeSlotStart}-${apt.timeSlotEnd}`;
+          } else if (apt.time) {
+            // Fallback to time if timeSlotStart/timeSlotEnd not available
             if (typeof apt.time === 'string') {
               timeStr = formatTimeFromString(apt.time);
             } else {
@@ -268,14 +281,29 @@ export default function AdminDashboard() {
             }
           }
           
+          // Handle vehicle - convert vehicleDetails object to string
+          let vehicleStr = "Unknown";
+          if (apt.vehicle) {
+            vehicleStr = apt.vehicle;
+          } else if (apt.vehicleDetails) {
+            const vd = apt.vehicleDetails;
+            const parts = [];
+            if (vd.make) parts.push(vd.make);
+            if (vd.model) parts.push(vd.model);
+            if (vd.registrationNumber) parts.push(`(${vd.registrationNumber})`);
+            if (parts.length > 0) {
+              vehicleStr = parts.join(" ");
+            }
+          }
+          
           return {
             id: apt.id || apt._id || "",
             customerName: apt.customerName || "Unknown",
-            vehicle: apt.vehicle || "Unknown",
+            vehicle: vehicleStr,
             serviceType: apt.serviceType || "Service",
             date: dateStr,
             time: timeStr,
-            status: apt.status || "Pending",
+            status: apt.status ? apt.status.charAt(0).toUpperCase() + apt.status.slice(1).toLowerCase() : "Pending",
             assignedEmployee: apt.assignedEmployeeNames && Array.isArray(apt.assignedEmployeeNames) && apt.assignedEmployeeNames.length > 0 
               ? apt.assignedEmployeeNames[0] 
               : apt.assignedEmployee || "",
@@ -285,7 +313,9 @@ export default function AdminDashboard() {
             assignedEmployeeIds: apt.assignedEmployeeIds && Array.isArray(apt.assignedEmployeeIds) 
               ? apt.assignedEmployeeIds 
               : undefined,
-            modifications: apt.modifications && Array.isArray(apt.modifications) ? apt.modifications : [],
+            modifications: apt.neededModifications && Array.isArray(apt.neededModifications) 
+              ? apt.neededModifications 
+              : (apt.modifications && Array.isArray(apt.modifications) ? apt.modifications : []),
             customerEmail: apt.customerEmail || "",
             estimatedCost: apt.estimatedCost || undefined
           };

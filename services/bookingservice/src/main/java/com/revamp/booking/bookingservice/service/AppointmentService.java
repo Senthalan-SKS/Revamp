@@ -15,7 +15,7 @@ import com.revamp.booking.bookingservice.model.Appointment;
 import com.revamp.booking.bookingservice.model.TimeSlot;
 
 @Service
-public class BookingService {
+public class AppointmentService {
 
 	@Autowired
 	private MongoTemplate mongoTemplate;

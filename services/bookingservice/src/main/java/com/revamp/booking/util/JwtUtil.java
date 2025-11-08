@@ -42,5 +42,25 @@ public class JwtUtil {
     public String getCustomerEmail(Claims claims) {
         return claims.get("email", String.class);
     }
+
+    public String getRole(Claims claims) {
+        String role = claims.get("role", String.class);
+        if (role == null) {
+            // Try roles array
+            Object roles = claims.get("roles");
+            if (roles instanceof java.util.List) {
+                java.util.List<?> rolesList = (java.util.List<?>) roles;
+                if (!rolesList.isEmpty()) {
+                    role = String.valueOf(rolesList.get(0));
+                }
+            }
+        }
+        return role;
+    }
+
+    public boolean isAdmin(Claims claims) {
+        String role = getRole(claims);
+        return "ADMIN".equalsIgnoreCase(role);
+    }
 }
 

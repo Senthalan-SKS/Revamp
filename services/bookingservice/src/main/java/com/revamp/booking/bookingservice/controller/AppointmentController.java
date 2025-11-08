@@ -11,15 +11,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.revamp.booking.bookingservice.model.Appointment;
-import com.revamp.booking.bookingservice.service.BookingService;
+import com.revamp.booking.bookingservice.service.AppointmentService;
 
 @RestController
-@RequestMapping("/api/bookings/appointments")
+@RequestMapping("/api/bookings/appointments/v1")
 @CrossOrigin(origins = "*")
-public class BookingController {
+public class AppointmentController {
 
 	@Autowired
-	private BookingService bookingService;
+	private AppointmentService appointmentService;
 
 	/**
 	 * Create a new appointment
@@ -27,7 +27,7 @@ public class BookingController {
 	@PostMapping
 	public ResponseEntity<?> createAppointment(@RequestBody Appointment appointment) {
 		try {
-			Appointment created = bookingService.createAppointment(appointment);
+			Appointment created = appointmentService.createAppointment(appointment);
 			return ResponseEntity.ok(created);
 		} catch (RuntimeException e) {
 			// Return error message for validation errors
@@ -49,7 +49,7 @@ public class BookingController {
 	@GetMapping("/{id}")
 	public ResponseEntity<Appointment> getAppointmentById(@PathVariable String id) {
 		try {
-			return bookingService.getAppointmentById(id)
+			return appointmentService.getAppointmentById(id)
 					.map(ResponseEntity::ok)
 					.orElse(ResponseEntity.notFound().build());
 		} catch (Exception e) {
@@ -63,7 +63,7 @@ public class BookingController {
 	@GetMapping
 	public ResponseEntity<List<Appointment>> getAllAppointments() {
 		try {
-			List<Appointment> appointments = bookingService.getAllAppointments();
+			List<Appointment> appointments = appointmentService.getAllAppointments();
 			System.out.println("DEBUG: Controller returning " + appointments.size() + " appointment(s)");
 			return ResponseEntity.ok(appointments);
 		} catch (Exception e) {
@@ -79,7 +79,7 @@ public class BookingController {
 	@GetMapping("/customer/{customerId}")
 	public ResponseEntity<List<Appointment>> getAppointmentsByCustomerId(@PathVariable String customerId) {
 		try {
-			List<Appointment> appointments = bookingService.getAppointmentsByCustomerId(customerId);
+			List<Appointment> appointments = appointmentService.getAppointmentsByCustomerId(customerId);
 			return ResponseEntity.ok(appointments);
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().build();
@@ -95,7 +95,7 @@ public class BookingController {
 			@RequestBody Map<String, String> request) {
 		try {
 			String status = request.get("status");
-			Appointment appointment = bookingService.updateAppointmentStatus(id, status);
+			Appointment appointment = appointmentService.updateAppointmentStatus(id, status);
 			return ResponseEntity.ok(appointment);
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().build();
@@ -115,7 +115,7 @@ public class BookingController {
 			@SuppressWarnings("unchecked")
 			List<String> employeeNames = (List<String>) request.get("employeeNames");
 			
-			Appointment appointment = bookingService.assignEmployees(id, employeeIds, employeeNames);
+			Appointment appointment = appointmentService.assignEmployees(id, employeeIds, employeeNames);
 			return ResponseEntity.ok(appointment);
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().build();
@@ -128,7 +128,7 @@ public class BookingController {
 	@DeleteMapping("/{id}")
 	public ResponseEntity<?> cancelAppointment(@PathVariable String id) {
 		try {
-			bookingService.cancelAppointment(id);
+			appointmentService.cancelAppointment(id);
 			return ResponseEntity.ok().build();
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().build();
@@ -143,7 +143,7 @@ public class BookingController {
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
 		try {
-			List<Appointment> appointments = bookingService.getAppointmentsByDateRange(startDate, endDate);
+			List<Appointment> appointments = appointmentService.getAppointmentsByDateRange(startDate, endDate);
 			return ResponseEntity.ok(appointments);
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().build();
@@ -170,7 +170,7 @@ public class BookingController {
 			Map<String, Object> result = new java.util.HashMap<>();
 			
 			// Check if date is unavailable
-			boolean isUnavailable = bookingService.isDateUnavailable(date);
+			boolean isUnavailable = appointmentService.isDateUnavailable(date);
 			boolean isSunday = date.getDayOfWeek().getValue() == 7;
 			
 			if (isUnavailable || isSunday) {
@@ -193,7 +193,7 @@ public class BookingController {
 				
 				// Check if time slot exists and is available
 				Optional<com.revamp.booking.bookingservice.model.TimeSlot> slotOpt = 
-					bookingService.getTimeSlotById(timeSlotId);
+					appointmentService.getTimeSlotById(timeSlotId);
 				
 				if (!slotOpt.isPresent()) {
 					result.put("isValid", false);

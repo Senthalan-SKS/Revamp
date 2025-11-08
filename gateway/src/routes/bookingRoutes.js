@@ -9,10 +9,18 @@ const BOOKING_SERVICE = process.env.BOOKING_SERVICE_URL || "http://localhost:808
 // Forward all booking routes to booking service
 router.use("/bookings", async (req, res) => {
 	try {
-		// req.path is like /appointments/... after /bookings is matched
-		// We need to reconstruct: /api/bookings/appointments/...
-		const url = `${BOOKING_SERVICE}/api/bookings${req.path}`;
-		console.log(`[Gateway] Forwarding ${req.method} ${url}`);
+		// req.path will be like /appointments or /{id} or /appointments/... after /bookings is matched
+		// We need to forward to /api/bookings/appointments or /api/bookings/{id} or /api/bookings/appointments/...
+		let targetPath = req.path || "";
+		// Remove leading slash if present
+		if (targetPath.startsWith("/")) {
+			targetPath = targetPath.substring(1);
+		}
+		// Construct the full URL
+		const url = targetPath 
+			? `${BOOKING_SERVICE}/api/bookings/${targetPath}`
+			: `${BOOKING_SERVICE}/api/bookings`;
+		console.log(`[Gateway] Forwarding ${req.method} ${req.originalUrl} -> ${url}`);
 		console.log(`[Gateway] Request body:`, JSON.stringify(req.body));
 
 		const fetchOptions = {
@@ -20,8 +28,6 @@ router.use("/bookings", async (req, res) => {
 			headers: {
 				"Content-Type": "application/json",
 			},
-			// Add timeout to prevent hanging requests
-			signal: AbortSignal.timeout(30000), // 30 second timeout
 		};
 
 		// Forward Authorization header if present
@@ -34,7 +40,19 @@ router.use("/bookings", async (req, res) => {
 			fetchOptions.body = JSON.stringify(req.body);
 		}
 
-		const response = await fetch(url, fetchOptions);
+		let response;
+		try {
+			response = await fetch(url, fetchOptions);
+		} catch (fetchError) {
+			console.error("[Gateway] Fetch error:", fetchError);
+			console.error("[Gateway] Fetch error details:", {
+				name: fetchError.name,
+				message: fetchError.message,
+				code: fetchError.code,
+				cause: fetchError.cause
+			});
+			throw fetchError;
+		}
 
 		if (!response.ok) {
 			console.error(`[Gateway] Booking service returned error: ${response.status} ${response.statusText}`);

@@ -14,7 +14,7 @@ public class MongoConfig {
 	@Value("${spring.data.mongodb.uri}")
 	private String mongoUri;
 
-	@Value("${BOOKING_MONGO_DATABASE:Time-slot}")
+	@Value("${spring.data.mongodb.database:bookings}")
 	private String databaseName;
 
 	@Bean
@@ -25,16 +25,25 @@ public class MongoConfig {
 			);
 		}
 		
+		// Use the database name from properties, or try to extract from URI
 		String dbName = databaseName;
-		if (mongoUri.contains("/")) {
-			String[] parts = mongoUri.split("/");
-			if (parts.length > 1) {
-				String dbPart = parts[parts.length - 1];
-				if (dbPart.contains("?")) {
-					dbName = dbPart.split("\\?")[0];
-				} else if (!dbPart.trim().isEmpty()) {
-					dbName = dbPart;
+		System.out.println("DEBUG: databaseName from @Value: " + databaseName);
+		if (dbName == null || dbName.trim().isEmpty()) {
+			// Try to extract from URI if not set in properties
+			if (mongoUri.contains("/")) {
+				String[] parts = mongoUri.split("/");
+				if (parts.length > 1) {
+					String dbPart = parts[parts.length - 1];
+					if (dbPart.contains("?")) {
+						dbName = dbPart.split("\\?")[0];
+					} else if (!dbPart.trim().isEmpty()) {
+						dbName = dbPart;
+					}
 				}
+			}
+			// Fallback if still empty
+			if (dbName == null || dbName.trim().isEmpty()) {
+				dbName = "bookings";
 			}
 		}
 		
