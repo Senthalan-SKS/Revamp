@@ -169,8 +169,10 @@ public class AuthController {
                         .body(Collections.singletonMap("message", "Only employees can be updated"));
             }
 
-            if (req.username != null && !req.username.isEmpty()) user.setUsername(req.username);
-            if (req.email != null && !req.email.isEmpty()) user.setEmail(req.email);
+            if (req.username != null && !req.username.isEmpty())
+                user.setUsername(req.username);
+            if (req.email != null && !req.email.isEmpty())
+                user.setEmail(req.email);
 
             User updated = userRepository.save(user);
             updated.setPasswordHash(null);
