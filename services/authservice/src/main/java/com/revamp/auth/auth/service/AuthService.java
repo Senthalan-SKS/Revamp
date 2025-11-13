@@ -34,7 +34,8 @@ public class AuthService {
     private final EmailService emailService;
 
     @Autowired
-    public AuthService(UserRepository userRepository, VerificationTokenRepository tokenRepository, JwtUtil jwtUtil, EmailService emailService) {
+    public AuthService(UserRepository userRepository, VerificationTokenRepository tokenRepository, JwtUtil jwtUtil,
+            EmailService emailService) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
@@ -49,17 +50,16 @@ public class AuthService {
 
         String hashed = passwordEncoder.encode(rawPassword);
         User user = new User(username, email, hashed, role != null ? role : "CONSUMER");
-        user.setEnabled(false); 
+        user.setEnabled(false);
         // return userRepository.save(user);
-         User savedUser = userRepository.save(user);
+        User savedUser = userRepository.save(user);
 
-         // Generate verification token
+        // Generate verification token
         String token = UUID.randomUUID().toString();
         VerificationToken verificationToken = new VerificationToken(
-            token,
-            savedUser.getId(),
-            LocalDateTime.now().plusMinutes(30)
-        );
+                token,
+                savedUser.getId(),
+                LocalDateTime.now().plusMinutes(30));
         tokenRepository.save(verificationToken);
 
         // Send verification email
@@ -67,15 +67,14 @@ public class AuthService {
 
         return savedUser;
 
-
-
     }
-
 
     public boolean verifyEmail(String token) {
         VerificationToken verificationToken = tokenRepository.findByToken(token);
-        if (verificationToken == null) return false;
-        if (verificationToken.getExpiryDate().isBefore(LocalDateTime.now())) return false;
+        if (verificationToken == null)
+            return false;
+        if (verificationToken.getExpiryDate().isBefore(LocalDateTime.now()))
+            return false;
 
         // Activate user
         String userId = verificationToken.getUserId();
@@ -92,17 +91,18 @@ public class AuthService {
         return true;
     }
 
-
-
     public String login(String email, String rawPassword) {
         Optional<User> opt = userRepository.findByEmail(email);
         if (!opt.isPresent())
             throw new RuntimeException("Invalid credentials");
         User user = opt.get();
+        if (!user.isEnabled()) {
+            throw new RuntimeException("User account not activated. Please verify Email.");
+        }
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             throw new RuntimeException("Invalid credentials");
         }
-        
+
         // create token with user id and email
         return jwtUtil.generateToken(user);
     }

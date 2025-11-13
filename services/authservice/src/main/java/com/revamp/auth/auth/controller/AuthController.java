@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -45,12 +44,11 @@ public class AuthController {
 
     @Autowired
     private AuthService authService;
-    
+
     @Autowired
     private UserRepository userRepository;
 
-
-    //  Inner DTOs must be static + public
+    // Inner DTOs must be static + public
     public static class RegisterRequest {
         public String username;
         public String email;
@@ -67,7 +65,6 @@ public class AuthController {
         public String token;
         public Object user;
 
-
         public AuthResponse(String token, Object user) {
             this.token = token;
             this.user = user;
@@ -79,11 +76,11 @@ public class AuthController {
         public String username;
     }
 
-     @PostMapping("/register")
-        public ResponseEntity<?> register(@RequestBody RegisterRequest req) {
-            try {
-                User created = authService.register(req.username, req.email, req.password, req.role);
-                created.setPasswordHash(null);
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody RegisterRequest req) {
+        try {
+            User created = authService.register(req.username, req.email, req.password, req.role);
+            created.setPasswordHash(null);
 
             return ResponseEntity
                     .status(201) // Created
@@ -103,39 +100,29 @@ public class AuthController {
             user.setPasswordHash(null); // don't leak hash
             return ResponseEntity.ok(new AuthResponse(
                     token,
-                    user
-            ));
+                    user));
         } catch (RuntimeException ex) {
             return ResponseEntity.status(401)
                     .body(Collections.singletonMap("message", ex.getMessage()));
         }
     }
-        //     user.setPasswordHash(null); // don’t leak hash
-        //     return ResponseEntity.ok(new AuthResponse(
-        //             token,
-        //             Collections.singletonMap("role", user.getRole())));
-        // } catch (RuntimeException ex) {
-        //     return ResponseEntity.status(401)
-        //             .body(Collections.singletonMap("message", ex.getMessage()));
-        // }
+    // user.setPasswordHash(null); // don’t leak hash
+    // return ResponseEntity.ok(new AuthResponse(
+    // token,
+    // Collections.singletonMap("role", user.getRole())));
+    // } catch (RuntimeException ex) {
+    // return ResponseEntity.status(401)
+    // .body(Collections.singletonMap("message", ex.getMessage()));
     // }
-
-    //  @GetMapping("/verify")
-    // public ResponseEntity<String> verifyAccount(@RequestParam("token") String token) {
-    //     boolean verified = registrationService.verifyUser(token);
-    //     if (verified)
-    //         return ResponseEntity.ok("Email verified successfully! You can now log in.");
-    //     else
-    //         return ResponseEntity.badRequest().body("Invalid or expired token!");
     // }
 
     @GetMapping("/verify")
     public ResponseEntity<String> verifyEmail(@RequestParam("token") String token) {
         boolean verified = authService.verifyEmail(token);
-        if (verified) return ResponseEntity.ok("Email verified successfully!");
+        if (verified)
+            return ResponseEntity.ok("Email verified successfully!");
         return ResponseEntity.badRequest().body("Invalid or expired verification link");
     }
-
 
     // Admin endpoint to register employees
     @PostMapping("/register-employee")
@@ -147,8 +134,8 @@ public class AuthController {
 
             // Return user data so frontend can use the ID for employee details
             return ResponseEntity
-                .status(201)
-                .body(created);
+                    .status(201)
+                    .body(created);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest()
                     .body(Collections.singletonMap("message", ex.getMessage()));
@@ -160,11 +147,11 @@ public class AuthController {
     public ResponseEntity<?> getAllEmployees() {
         try {
             List<User> employees = userRepository.findAll()
-                .stream()
-                .filter(user -> "EMPLOYEE".equals(user.getRole()))
-                .peek(user -> user.setPasswordHash(null)) // Remove password hashes
-                .collect(Collectors.toList());
-            
+                    .stream()
+                    .filter(user -> "EMPLOYEE".equals(user.getRole()))
+                    .peek(user -> user.setPasswordHash(null)) // Remove password hashes
+                    .collect(Collectors.toList());
+
             return ResponseEntity.ok(employees);
         } catch (Exception ex) {
             return ResponseEntity.status(500)
@@ -178,17 +165,19 @@ public class AuthController {
         try {
             // Check if user exists
             User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Employee not found"));
-            
+                    .orElseThrow(() -> new RuntimeException("Employee not found"));
+
             // Only allow deletion of employees
             if (!"EMPLOYEE".equals(user.getRole())) {
                 return ResponseEntity.badRequest()
-                    .body(Collections.singletonMap("message", "Only employees can be deleted through this endpoint"));
+                        .body(Collections.singletonMap("message",
+                                "Only employees can be deleted through this endpoint"));
             }
-            
-            // Delete user (employee details should be deleted separately via employeeservice)
+
+            // Delete user (employee details should be deleted separately via
+            // employeeservice)
             userRepository.deleteById(userId);
-            
+
             return ResponseEntity.ok(Collections.singletonMap("message", "Employee deleted successfully"));
         } catch (Exception ex) {
             return ResponseEntity.status(404)
@@ -201,14 +190,15 @@ public class AuthController {
     public ResponseEntity<?> updateEmployee(@PathVariable String userId, @RequestBody RegisterRequest req) {
         try {
             User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Employee not found"));
-            
+                    .orElseThrow(() -> new RuntimeException("Employee not found"));
+
             // Only allow updating employees
             if (!"EMPLOYEE".equals(user.getRole())) {
                 return ResponseEntity.badRequest()
-                    .body(Collections.singletonMap("message", "Only employees can be updated through this endpoint"));
+                        .body(Collections.singletonMap("message",
+                                "Only employees can be updated through this endpoint"));
             }
-            
+
             // Update user fields
             if (req.username != null && !req.username.isEmpty()) {
                 user.setUsername(req.username);
@@ -216,10 +206,10 @@ public class AuthController {
             if (req.email != null && !req.email.isEmpty()) {
                 user.setEmail(req.email);
             }
-            
+
             User updated = userRepository.save(user);
             updated.setPasswordHash(null);
-            
+
             return ResponseEntity.ok(updated);
         } catch (Exception ex) {
             return ResponseEntity.status(404)
