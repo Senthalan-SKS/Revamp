@@ -18,10 +18,16 @@ app.use(cors());
 app.use(bodyParser.json());
 
 /* ===== CORS (must be before routes) ===== */
-const allowedOrigins = ["http://localhost:3000"];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
+  : ["http://localhost:3000"];
+
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`Blocked CORS request from origin: ${origin}`);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
@@ -30,6 +36,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
 // If you still want an explicit preflight handler, use a valid path (Express 5):
 // app.options("/api/*", cors(corsOptions));
 
@@ -39,7 +46,6 @@ app.use(bodyParser.json());
 /* ===== Mount routes ===== */
 app.use("/api/auth", authRoutes);
 app.use("/api/customer", customerRoutes);
-app.use("/api/auth", employeeRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/time-tracking", timeTrackingRoutes);

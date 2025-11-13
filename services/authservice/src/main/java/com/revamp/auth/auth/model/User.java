@@ -13,6 +13,7 @@ public class User {
     private String passwordHash; // store hashed password
     private String role; // "ADMIN", "EMPLOYEE", "CONSUMER"
     private boolean enabled = false;
+    private boolean enabled = false;
 
     public User() {}
 
