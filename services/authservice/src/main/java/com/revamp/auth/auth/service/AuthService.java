@@ -22,25 +22,14 @@ import com.revamp.auth.auth.util.JwtUtil;
 
 @Service
 public class AuthService {
-
-    @Value("${google.client.id:}")
-    private String googleClientId;
-
-    public void changePassword(String email, String currentPassword, String newPassword) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-            throw new RuntimeException("Current password is incorrect");
-        }
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
-    }
-
     private final UserRepository userRepository;
     private final VerificationTokenRepository tokenRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
+
+    @Value("${google.client.id:}")
+    private String googleClientId;
 
     @Autowired
     public AuthService(UserRepository userRepository, VerificationTokenRepository tokenRepository, JwtUtil jwtUtil,
@@ -65,45 +54,16 @@ public class AuthService {
         userRepository.save(user);
     }
 
-    private final UserRepository userRepository;
-    private final VerificationTokenRepository tokenRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
-    private final EmailService emailService;
-
-    @Autowired
-    public AuthService(UserRepository userRepository, VerificationTokenRepository tokenRepository, JwtUtil jwtUtil,
-            EmailService emailService) {
-        this.userRepository = userRepository;
-        this.tokenRepository = tokenRepository;
-        this.passwordEncoder = new BCryptPasswordEncoder();
-        this.jwtUtil = jwtUtil;
-        this.emailService = emailService;
-    }
-
-     /** ✅ Change Password */
-    public void changePassword(String email, String currentPassword, String newPassword) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-            throw new RuntimeException("Current password is incorrect");
-        }
-
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
-    }
-
     /** ✅ Verify Google OAuth Token */
     public GoogleIdToken.Payload verifyGoogleToken(String idTokenString) throws Exception {
         if (googleClientId == null || googleClientId.isEmpty() || googleClientId.equals("YOUR_GOOGLE_CLIENT_ID_HERE")) {
-            throw new Exception("Google OAuth is not configured. Please set google.client.id in application.properties");
+            throw new Exception(
+                    "Google OAuth is not configured. Please set google.client.id in application.properties");
         }
-        
+
         GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
                 new NetHttpTransport(),
-                new JacksonFactory()
-        ).setAudience(Collections.singletonList(googleClientId)).build();
+                new JacksonFactory()).setAudience(Collections.singletonList(googleClientId)).build();
 
         GoogleIdToken idToken = verifier.verify(idTokenString);
         if (idToken != null) {
@@ -128,7 +88,6 @@ public class AuthService {
         return userRepository.save(newUser);
     }
 
-
     /** ✅ Register new user (email/password) */
     public User register(String username, String email, String rawPassword, String role) {
         if (userRepository.existsByEmail(email)) {
@@ -137,8 +96,13 @@ public class AuthService {
 
         String hashed = passwordEncoder.encode(rawPassword);
         User user = new User(username, email, hashed, role != null ? role : "CONSUMER");
+
+        if ("CONSUMER".equalsIgnoreCase(role) || role==null) {
+            user.setEnabled(false);
+        } else {
+            user.setEnabled(true);
+        }
         
-        user.setEnabled(false);
         // return userRepository.save(user);
         User savedUser = userRepository.save(user);
 
@@ -193,7 +157,6 @@ public class AuthService {
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             throw new RuntimeException("Invalid credentials");
         }
-
 
         return jwtUtil.generateToken(user);
     }
