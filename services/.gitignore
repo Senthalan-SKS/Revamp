@@ -48,6 +48,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+#authService env
+authservice/src/main/resources/application.properties
+
 # Spring Boot application.properties (contains sensitive credentials)
 # Paths are relative to services/ directory
 authservice/src/main/resources/application.properties
@@ -64,3 +67,4 @@ bookingservice/src/main/resources/application.properties
 
 # Maven wrapper jar (auto-downloaded, don't commit)
 **/.mvn/wrapper/maven-wrapper.jar
+
