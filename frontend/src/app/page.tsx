@@ -64,7 +64,7 @@ export default function HomePage() {
         </motion.div>
 
         {/* Development Quick Access */}
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8, duration: 0.8 }}
@@ -85,7 +85,7 @@ export default function HomePage() {
               👤 Consumer Dashboard (Dev)
             </button>
           </Link>
-        </motion.div>
+        </motion.div> */}
       </div>
     </main>
   );
